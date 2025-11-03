@@ -31,7 +31,7 @@ def vwap_slippage_bps(levels, qty):
     return filled, vwap, bps
 
 def print_levels_if_needed(PRINT_LEVELS, position, AUTO_FROM_FRONTIER,
-                           spot_bids, spot_asks, cm_bids, cm_asks, contract_size, LEVELS_TO_PRINT):
+                           spot_bids, spot_asks, cm_bids, cm_asks, contract_size, LEVELS_TO_PRINT=None):
     if PRINT_LEVELS and position is None and not AUTO_FROM_FRONTIER:
         print_per_level_book_edge(
             spot_bids, spot_asks, cm_bids, cm_asks,

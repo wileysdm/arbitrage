@@ -1,9 +1,10 @@
 import os
 
 # —— 运行参数 ——
-DRY_RUN = True
 RUN_SECONDS = 25
 POLL_INTERVAL = 0.06    # WS 已经很快了，可适当调小打印/判定节奏
+# === 运行开关 ===
+DRY_RUN = False  # True 时不连用户流、不做查账；先本地压测可改 True
 
 # —— 启用“REST快照+WS增量”模式与端点 ——（主网默认）
 USE_WS_ORDERBOOK = True

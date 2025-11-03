@@ -1,0 +1,2 @@
+ts_ms,ts_iso,event,trade_id,side,Q_btc,N_cntr,spot_vwap,perp_vwap,spot_orderId,cm_orderId,fee_btc_spot,fee_btc_cm,income_btc,delta_btc
+1762178891251,2025-11-03 14:08:11,OPEN,T1762178891-1,NEG,0.47000000,512,108271.16,108205.90,,,,,,
