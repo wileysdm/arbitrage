@@ -1,5 +1,12 @@
-
-## 2025.9.25更新，获取行情更改为websocket方式。
+## 2025.10.25更新，账户维护
+### 用户数据流（User Data Stream）接入
+新增 arbitrage/exchanges/user_stream.py：
+Spot & COIN-M listenKey 自动创建/续期（无签名 POST/PUT）
+断线重连（指数退避） + staleness 看门狗 + 重连后查账回补（openOrders/account/position/trades）
+### REST 封装修复与增强
+重写 arbitrage/exchanges/binance_rest.py：统一 GET/POST/PUT/DELETE；新增无签名 spot_post/spot_put/dapi_post/dapi_put 供 listenKey 使用
+新增交易对元数据函数：spot_symbol_meta()、dapi_symbol_meta()（拿 price_tick/qty_step/contract_size）
+## 2025.9.25更新，获取行情更改为websocket方式。更新套利机制为，MAKER TAKER方式。先下合约侧maker单，再下现货侧taker单
 ### 用rest获取一次快照，之后用websocket获取订单簿变化情况，以此来维护本地订单簿与价格
 ### 下单仍用rest方式
 ### 需要安装 websocket-client库
