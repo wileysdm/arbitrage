@@ -1,57 +1,37 @@
-import time, hmac, hashlib, urllib.parse, os, csv
-from datetime import datetime
-from math import floor, ceil
-from arbitrage.config import TRADES_CSV
+# -*- coding: utf-8 -*-
+"""
+工具函数：vwap、日志、ID 生成等
+"""
+from __future__ import annotations
+import time
+from typing import List, Tuple, Optional
 
-def ts_ms(): return int(time.time() * 1000)
+_trade_id_seed = int(time.time() * 1000)
 
-def sign_query(secret: str, params: dict) -> str:
-    q = urllib.parse.urlencode(params, doseq=True)
-    sig = hmac.new(secret.encode(), q.encode(), hashlib.sha256).hexdigest()
-    return q + "&signature=" + sig
+def next_trade_id() -> int:
+    global _trade_id_seed
+    _trade_id_seed += 1
+    return _trade_id_seed
 
-def round_step(x, step, mode="floor"):
-    step = float(step)
-    n = x/step
-    if mode == "ceil": n = ceil(n-1e-12)
-    elif mode == "round": n = round(n)
-    else: n = floor(n+1e-12)
-    return max(step, n*step)
-
-def vwap_to_qty(levels, target_qty):
-    if target_qty <= 0 or not levels: return 0.0, None
-    remain, notional, filled = target_qty, 0.0, 0.0
+def vwap_to_qty(levels: List[Tuple[float, float]], qty: float):
+    """给定 [(px,qty)] 与目标数量，返回 (filled, vwap)"""
+    remain = qty
+    notional = 0.0
+    filled = 0.0
     for px, q in levels:
         if remain <= 1e-12: break
         take = min(remain, q)
-        notional += take*px
-        filled   += take
-        remain   -= take
-    if filled <= 0: return 0.0, None
-    return filled, (notional/filled)
+        notional += take * px
+        filled += take
+        remain -= take
+    vwap = (notional / filled) if filled > 0 else None
+    return filled, vwap
 
-# —— 交易日志（CSV） ——
-TRADE_FIELDS = [
-    "ts_ms","ts_iso","event","trade_id","side",
-    "Q_btc","N_cntr","spot_vwap","perp_vwap",
-    "spot_orderId","cm_orderId",
-    "fee_btc_spot","fee_btc_cm",
-    "income_btc","delta_btc"
-]
-_SEQ = 0
-def next_trade_id():
-    global _SEQ
-    _SEQ += 1
-    return f"T{int(time.time())}-{_SEQ}"
-
-def append_trade_row(row: dict):
-    row = dict(row)
-    if "ts_ms" not in row: row["ts_ms"] = ts_ms()
-    row["ts_iso"] = datetime.utcfromtimestamp(row["ts_ms"]/1000).strftime("%Y-%m-%d %H:%M:%S")
-    for k in TRADE_FIELDS:
-        row.setdefault(k, "")
-    need_header = not os.path.exists(TRADES_CSV) or os.path.getsize(TRADES_CSV) == 0
-    with open(TRADES_CSV, "a", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=TRADE_FIELDS)
-        if need_header: w.writeheader()
-        w.writerow({k: row.get(k, "") for k in TRADE_FIELDS})
+def append_trade_row(d: dict):
+    """轻量日志：先简单打印，后续可落 CSV / DB"""
+    ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    side = d.get("side","")
+    evt  = d.get("event","")
+    q    = d.get("Q_btc","")
+    n    = d.get("N_cntr","")
+    print(f"[TRADE] {ts} | {evt} {side} | Q={q} N={n} | {d}")

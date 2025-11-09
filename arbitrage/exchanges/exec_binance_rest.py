@@ -1,89 +1,120 @@
-from arbitrage.config import SPOT_SYMBOL, COINM_SYMBOL, DRY_RUN
-from arbitrage.exchanges.binance_rest import spot_signed, dapi_signed
-from arbitrage.exchanges.binance_rest import spot_get, dapi_get  # 可用于调试
+# -*- coding: utf-8 -*-
+# arbitrage/exchanges/exec_binance_rest.py
+"""
+现货 / 币本位合约 执行封装（轻量版）
+- 现货：
+    place_spot_market(side, qty, symbol)
+    place_spot_limit_maker(side, qty, price, symbol)
+    get_spot_order_status(order_id, symbol)
+    cancel_spot_order(order_id, symbol)
+- 币本位（COIN-M）：
+    place_coinm_market(side, quantity_cntr, reduce_only, symbol)
+    place_coinm_limit(side, quantity_cntr, price, post_only, symbol)
+    get_coinm_order_status(order_id, symbol)
+    cancel_coinm_order(order_id, symbol)
+备注：
+- 数量/价格未做步长对齐，若报最小下单量错误请在上游对齐或放大名义
+"""
 
-def place_spot_limit_maker(side, qty, price, symbol: str | None = None):
-    sym = symbol or SPOT_SYMBOL
-    params = {"symbol": sym,"side": side,"type": "LIMIT_MAKER",
-              "quantity": f"{qty:.8f}","price": f"{price:.2f}","newOrderRespType":"RESULT"}
-    if DRY_RUN:
-        print(f"[DRY] SPOT {sym} {side} {params['quantity']} @ {params['price']}")
-        return {"orderId": None}
-    return spot_signed("/api/v3/order","POST",params)
+from __future__ import annotations
+import os
+from typing import Tuple, Any
 
-def place_spot_market(side, qty, symbol: str | None = None):
-    sym = symbol or SPOT_SYMBOL
-    params = {"symbol": sym,"side": side,"type": "MARKET","quantity": f"{qty:.8f}"}
-    if DRY_RUN:
-        print(f"[DRY] SPOT {sym} {side} MARKET {params['quantity']}")
-        return {"orderId": None}
-    return spot_signed("/api/v3/order","POST",params)
+from arbitrage.exchanges.binance_rest import r_signed
 
-def place_coinm_limit(side, contracts, price, post_only=True, symbol: str | None = None):
-    sym = symbol or COINM_SYMBOL
-    params = {"symbol": sym,"side": side,"type": "LIMIT",
-              "timeInForce": "GTX" if post_only else "GTC",
-              "quantity": str(int(contracts)),"price": f"{price:.1f}",
-              "newOrderRespType": "RESULT"}
-    if DRY_RUN:
-        print(f"[DRY] COIN-M {sym} {side} {params['quantity']} @ {params['price']} (postOnly={post_only})")
-        return {"orderId": None}
-    return dapi_signed("/dapi/v1/order","POST",params)
+# ---- 端点 ----
+SPOT_BASE = os.environ.get("SPOT_BASE", "https://api.binance.com")
+DAPI_BASE = os.environ.get("DAPI_BASE", "https://dapi.binance.com")  # COIN-M
 
-def place_coinm_market(side, contracts, reduce_only=True, symbol: str | None = None):
-    sym = symbol or COINM_SYMBOL
-    params = {"symbol": sym,"side": side,"type":"MARKET",
-              "quantity": str(int(contracts)),"reduceOnly": "true" if reduce_only else "false",
-              "newOrderRespType": "RESULT"}
-    if DRY_RUN:
-        print(f"[DRY] COIN-M {sym} {side} MARKET {params['quantity']} (reduceOnly={reduce_only})")
-        return {"orderId": None}
-    return dapi_signed("/dapi/v1/order","POST",params)
+# ---- KEY（默认用 SPOT_KEY/SECRET；COIN-M 可单独配置 DAPI_KEY/SECRET）----
+SPOT_KEY    = os.environ.get("SPOT_KEY", "")
+SPOT_SECRET = os.environ.get("SPOT_SECRET", "")
 
-def get_spot_order_status(order_id: int, symbol: str | None = None):
-    try:
-        sym = symbol or SPOT_SYMBOL
-        resp = spot_signed("/api/v3/order","GET",{"symbol": sym, "orderId": order_id})
-        return resp.get("status",""), float(resp.get("executedQty",0.0) or 0.0)
-    except Exception as e:
-        print("⚠ 现货订单查询失败：", e); return "ERROR", 0.0
+DAPI_KEY    = os.environ.get("DAPI_KEY", SPOT_KEY)
+DAPI_SECRET = os.environ.get("DAPI_SECRET", SPOT_SECRET)
 
-def get_coinm_order_status(order_id: int, symbol: str | None = None):
-    try:
-        sym = symbol or COINM_SYMBOL
-        resp = dapi_signed("/dapi/v1/order","GET",{"symbol": sym, "orderId": order_id})
-        exec_qty = float(resp.get("executedQty", resp.get("cumQty", 0.0)) or 0.0)
-        return resp.get("status",""), exec_qty
-    except Exception as e:
-        print("⚠ 合约订单查询失败：", e); return "ERROR", 0.0
+# =========================================================
+# 现货 Spot
+# =========================================================
+def place_spot_market(side: str, qty: float, symbol: str) -> Any:
+    """
+    市价单（RESULT）
+    side: "BUY"/"SELL"
+    """
+    params = {
+        "symbol": symbol.upper(),
+        "side": side.upper(),
+        "type": "MARKET",
+        "quantity": f"{float(qty):.8f}",
+        "newOrderRespType": "RESULT",
+    }
+    return r_signed(SPOT_BASE, "/api/v3/order", "POST", params, SPOT_KEY, SPOT_SECRET)
 
-# 账户与成交明细（给风控与记账用）
-def dapi_position_risk():
-    return dapi_signed("/dapi/v1/positionRisk","GET",{})
+def place_spot_limit_maker(side: str, qty: float, price: float, symbol: str) -> Any:
+    """
+    限价 Post-Only：Binance 现货用 "LIMIT_MAKER"
+    """
+    params = {
+        "symbol": symbol.upper(),
+        "side": side.upper(),
+        "type": "LIMIT_MAKER",
+        "quantity": f"{float(qty):.8f}",
+        "price": f"{float(price):.8f}",
+        "newOrderRespType": "RESULT",
+    }
+    return r_signed(SPOT_BASE, "/api/v3/order", "POST", params, SPOT_KEY, SPOT_SECRET)
 
-def dapi_account():
-    return dapi_signed("/dapi/v1/account","GET",{})
+def get_spot_order_status(order_id: int, symbol: str) -> Tuple[str, float]:
+    """
+    返回 (status, executedQty)
+    """
+    params = {"symbol": symbol.upper(), "orderId": int(order_id)}
+    j = r_signed(SPOT_BASE, "/api/v3/order", "GET", params, SPOT_KEY, SPOT_SECRET)
+    return j.get("status", ""), float(j.get("executedQty", 0.0) or 0.0)
 
-def spot_trades_by_order(order_id: int, symbol: str | None = None):
-    sym = symbol or SPOT_SYMBOL
-    return spot_signed("/api/v3/myTrades","GET",{"symbol": sym, "orderId": order_id})
+def cancel_spot_order(order_id: int, symbol: str) -> Any:
+    params = {"symbol": symbol.upper(), "orderId": int(order_id)}
+    return r_signed(SPOT_BASE, "/api/v3/order", "DELETE", params, SPOT_KEY, SPOT_SECRET)
 
-def dapi_user_trades(order_id: int, symbol: str | None = None):
-    sym = symbol or COINM_SYMBOL
-    return dapi_signed("/dapi/v1/userTrades","GET",{"symbol": sym, "orderId": order_id})
+# =========================================================
+# 币本位合约 COIN-M (dapi)
+# =========================================================
+def place_coinm_market(side: str, quantity_cntr: int, reduce_only: bool, symbol: str) -> Any:
+    """
+    市价单（张为单位）
+    - reduce_only: True/False
+    """
+    params = {
+        "symbol": symbol.upper(),
+        "side": side.upper(),
+        "type": "MARKET",
+        "quantity": int(quantity_cntr),
+        "reduceOnly": "true" if reduce_only else "false",
+        "newOrderRespType": "RESULT",
+    }
+    return r_signed(DAPI_BASE, "/dapi/v1/order", "POST", params, DAPI_KEY, DAPI_SECRET)
 
-def dapi_income_since(start_ms: int, symbol: str | None = None):
-    sym = symbol or COINM_SYMBOL
-    return dapi_signed("/dapi/v1/income","GET",{"symbol": sym, "startTime": start_ms})
+def place_coinm_limit(side: str, quantity_cntr: int, price: float, post_only: bool, symbol: str) -> Any:
+    """
+    限价单；post_only=True 时使用 GTX（Post Only）
+    """
+    params = {
+        "symbol": symbol.upper(),
+        "side": side.upper(),
+        "type": "LIMIT",
+        "timeInForce": "GTX" if post_only else "GTC",
+        "quantity": int(quantity_cntr),
+        "price": f"{float(price):.2f}",
+        "newOrderRespType": "RESULT",
+    }
+    return r_signed(DAPI_BASE, "/dapi/v1/order", "POST", params, DAPI_KEY, DAPI_SECRET)
 
-def cancel_spot_order(order_id: int):
-    try:
-        return spot_signed("/api/v3/order","DELETE",{"symbol": SPOT_SYMBOL, "orderId": order_id})
-    except Exception as e:
-        print("⚠ 现货撤单失败：", e); return {}
+def get_coinm_order_status(order_id: int, symbol: str) -> Tuple[str, float]:
+    params = {"symbol": symbol.upper(), "orderId": int(order_id)}
+    j = r_signed(DAPI_BASE, "/dapi/v1/order", "GET", params, DAPI_KEY, DAPI_SECRET)
+    # 币本位返回的 executedQty（张）；为统一这里仍返回 float
+    return j.get("status", ""), float(j.get("executedQty", 0.0) or 0.0)
 
-def cancel_coinm_order(order_id: int):
-    try:
-        return dapi_signed("/dapi/v1/order","DELETE",{"symbol": COINM_SYMBOL, "orderId": order_id})
-    except Exception as e:
-        print("⚠ 合约撤单失败：", e); return {}
+def cancel_coinm_order(order_id: int, symbol: str) -> Any:
+    params = {"symbol": symbol.upper(), "orderId": int(order_id)}
+    return r_signed(DAPI_BASE, "/dapi/v1/order", "DELETE", params, DAPI_KEY, DAPI_SECRET)
