@@ -6,6 +6,8 @@
 from __future__ import annotations
 import asyncio
 import signal
+import logging
+import os
 
 from arbitrage.config import (
     HEDGE_KIND, QUOTE_KIND, HEDGE_SYMBOL, QUOTE_SYMBOL,
@@ -13,8 +15,13 @@ from arbitrage.config import (
 from arbitrage.data.service import boot_and_start, DataService
 from arbitrage.exchanges.user_stream import run_all_user_streams
 from arbitrage.strategy.logic import try_enter_unified, try_exit_unified
-
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 class Runner:
+
     def __init__(self):
         self.pos = None
         self._stopping = False
@@ -26,6 +33,7 @@ class Runner:
             regs.append((QUOTE_KIND, QUOTE_SYMBOL))
 
         # 启动数据层（WS；如需持久化把 persist=True）
+        logging.info("booting data service with regs=%s", regs)
         await boot_and_start(regs, use_ws=True, persist=False)
 
         # 启动用户数据流（按腿启用）
@@ -34,6 +42,7 @@ class Runner:
         enable_cm   = (HEDGE_KIND=="coinm" or QUOTE_KIND=="coinm")
         asyncio.create_task(run_all_user_streams(enable_spot=enable_spot, enable_um=enable_um, enable_cm=enable_cm))
 
+        logging.info("starting main loop")
         # 主循环
         await self.loop()
 
@@ -44,13 +53,15 @@ class Runner:
                     ok, pos = try_enter_unified()
                     if ok:
                         self.pos = pos
+                        logging.info("entered position: %s", pos)
                 else:
                     trig, reason = try_exit_unified(self.pos)
                     if trig:
-                        print(f"[EXIT] {reason}")
+                        logging.info("[EXIT] %s", reason)
                         self.pos = None
             except Exception as e:
-                print("[MAIN] error:", e)
+                # log full stack
+                logging.exception("[MAIN] error during main loop")
             await asyncio.sleep(0.25)  # 250ms 周期
 
     def stop(self):
@@ -69,9 +80,10 @@ async def main():
         pass
 
     try:
+        logging.info("runner starting")
         await r.start()
     except KeyboardInterrupt:
-        # Windows 下按 Ctrl+C 仍能退出；顺手标记 stop
+        logging.info("KeyboardInterrupt received, stopping runner")
         r.stop()
 
 if __name__ == "__main__":

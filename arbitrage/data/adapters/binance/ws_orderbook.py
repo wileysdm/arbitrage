@@ -6,32 +6,14 @@ Binance WS - Partial Book Depth 适配（spot/coinm/um）
   每条消息发布一个 OrderBook 快照（bids/asks 皆为浮点元组）
 """
 from __future__ import annotations
-import os, ssl, json, time, asyncio
-from dataclasses import dataclass
-from typing import List, Tuple, Optional
+import ssl, json, time, asyncio
 
 # websockets 库（async）
 import websockets
 
-# 兜底 schemas / bus
-try:
-    from arbitrage.data.schemas import OrderBook
-except Exception:
-    @dataclass
-    class OrderBook:
-        symbol: str
-        ts: float
-        bids: List[Tuple[float, float]]
-        asks: List[Tuple[float, float]]
+from arbitrage.data.schemas import OrderBook
 
-try:
-    from arbitrage.data.bus import Bus, Topic
-except Exception:
-    class Topic:
-        ORDERBOOK = "orderbook"
-    class Bus:
-        def publish(self, topic, key, value):
-            print(f"[NoopBus] {topic} {key} -> depth {len(value.bids)}/{len(value.asks)}")
+from arbitrage.data.bus import Bus, Topic
 
 # ---- WS 端点 ----
 def _ws_base(kind: str) -> str:

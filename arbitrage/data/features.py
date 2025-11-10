@@ -1,3 +1,4 @@
+#和frontier.py类似，功能疑似重复可以尝试删除
 # -*- coding: utf-8 -*-
 # arbitrage/data/features.py
 """
@@ -5,25 +6,8 @@
 """
 from __future__ import annotations
 from typing import List, Tuple, Optional
+from arbitrage.utils import vwap_to_qty
 
-try:
-    # 优先复用你项目已有的 vwap_to_qty
-    from arbitrage.utils import vwap_to_qty
-except Exception:
-    # 兜底实现
-    def vwap_to_qty(levels: List[Tuple[float, float]], qty: float):
-        remain = qty
-        notional = 0.0
-        filled = 0.0
-        for px, q in levels:
-            take = min(remain, q)
-            notional += take * px
-            filled += take
-            remain -= take
-            if remain <= 1e-12:
-                break
-        vwap = (notional / filled) if filled > 0 else None
-        return filled, vwap
 
 def mid_from_orderbook(bids: List[Tuple[float, float]], asks: List[Tuple[float, float]]) -> Optional[float]:
     if not bids or not asks: 

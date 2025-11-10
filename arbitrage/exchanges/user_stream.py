@@ -28,6 +28,7 @@ from arbitrage.exchanges.binance_rest import r_post, r_put, r_get  # 使用你�
 from arbitrage.data.bus import Bus, Topic
 from arbitrage.data.service import DataService
 
+# to-do 挪到 config.py
 # 端点
 SPOT_BASE = os.environ.get("SPOT_BASE", "https://api.binance.com")
 DAPI_BASE = os.environ.get("DAPI_BASE", "https://dapi.binance.com")

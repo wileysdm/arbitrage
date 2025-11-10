@@ -19,7 +19,7 @@ from arbitrage.data.cache import Cache, pump_from_bus
 from arbitrage.data.store import Store
 from arbitrage.data.schemas import OrderBook, MarkPrice, FundingRate, Meta
 
-# 适配器（之前我们已经写好）
+# 适配器
 from arbitrage.data.adapters.binance.ws_orderbook import run_orderbook_ws
 from arbitrage.data.adapters.binance.ws_mark import run_mark_ws
 from arbitrage.data.adapters.binance.rest import poll_loop_orderbook, poll_loop_mark, get_meta

@@ -17,11 +17,12 @@
 """
 
 from __future__ import annotations
+import logging
 import os
 from typing import Tuple, Any
 
 from arbitrage.exchanges.binance_rest import r_signed
-
+# to-do: config里有，可以删除
 # ---- 端点 ----
 SPOT_BASE = os.environ.get("SPOT_BASE", "https://api.binance.com")
 DAPI_BASE = os.environ.get("DAPI_BASE", "https://dapi.binance.com")  # COIN-M
@@ -45,10 +46,12 @@ def place_spot_market(side: str, qty: float, symbol: str) -> Any:
         "symbol": symbol.upper(),
         "side": side.upper(),
         "type": "MARKET",
-        "quantity": f"{float(qty):.8f}",
+        "quantity": f"{float(qty):.5f}",
         "newOrderRespType": "RESULT",
     }
-    return r_signed(SPOT_BASE, "/api/v3/order", "POST", params, SPOT_KEY, SPOT_SECRET)
+    r =  r_signed(SPOT_BASE, "/api/v3/order", "POST", params, SPOT_KEY, SPOT_SECRET)
+    logging.info("Response: %s", r)
+    return r
 
 def place_spot_limit_maker(side: str, qty: float, price: float, symbol: str) -> Any:
     """
@@ -58,8 +61,8 @@ def place_spot_limit_maker(side: str, qty: float, price: float, symbol: str) -> 
         "symbol": symbol.upper(),
         "side": side.upper(),
         "type": "LIMIT_MAKER",
-        "quantity": f"{float(qty):.8f}",
-        "price": f"{float(price):.8f}",
+        "quantity": f"{float(qty):.5f}",
+        "price": f"{float(price):.5f}",
         "newOrderRespType": "RESULT",
     }
     return r_signed(SPOT_BASE, "/api/v3/order", "POST", params, SPOT_KEY, SPOT_SECRET)

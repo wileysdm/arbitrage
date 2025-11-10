@@ -13,9 +13,10 @@
 from __future__ import annotations
 
 import time
-from typing import Tuple, List, Optional
+import logging
+from typing import Tuple, List
 
-from arbitrage.models import Position
+from arbitrage.data.schemas import Position
 from arbitrage.utils import vwap_to_qty, append_trade_row, next_trade_id
 
 # ===== 配置常量 =====
@@ -72,14 +73,18 @@ def try_enter_unified():
       - 执行：taker / maker 由 EXECUTION_MODE 决定（默认 taker）
     返回: (ok, Position|None)
     """
+    logging.info("try_enter_unified called")
     quote = make_leg(QUOTE_KIND, QUOTE_SYMBOL)
     hedge = make_leg(HEDGE_KIND, HEDGE_SYMBOL)
+    logging.info("Created legs: quote=%s, hedge=%s", quote, hedge)
 
     # 取盘口与参考价
     q_bids, q_asks = quote.get_books(limit=5)
     h_bids, h_asks = hedge.get_books(limit=5)
     q_ref = quote.ref_price()
     h_ref = hedge.ref_price()
+
+    logging.info("Reference prices: quote=%s, hedge=%s", q_ref, h_ref)
 
     sp_bps = _spread_bps(q_ref, h_ref)
     if ONLY_POSITIVE_CARRY and sp_bps < 0:
@@ -90,7 +95,9 @@ def try_enter_unified():
     # 名义 → 数量
     q_qty = quote.qty_from_usd(V_USD)
     h_qty = hedge.qty_from_usd(V_USD)
+    logging.info("Calculated quantities: quote_qty=%s, hedge_qty=%s", q_qty, h_qty)
 
+    # to-do: 增加一个mode hybrid_maker_then_taker 
     mode = (EXECUTION_MODE or "").lower()
     if sp_bps > 0:
         # 正向：买 hedge / 卖 quote
@@ -103,11 +110,14 @@ def try_enter_unified():
         if mode == "maker":
             px_h = h_bids[0][0]  # 买 hedge → bid
             px_q = q_asks[0][0]  # 卖 quote → ask
+            logging.info("Placing place_limit_maker orders: hedge BUY %s @ %s, quote SELL %s @ %s", h_qty, px_h, q_qty, px_q)
             o_h = hedge.place_limit_maker("BUY",  h_qty, px_h)
             o_q = quote.place_limit_maker("SELL", q_qty, px_q)
         else:
+            logging.info("Placing place_market orders: hedge BUY %s, quote SELL %s", h_qty, q_qty)
             o_h = hedge.place_market("BUY",  h_qty)
             o_q = quote.place_market("SELL", q_qty)
+        
 
         tid = next_trade_id()
         append_trade_row({
@@ -138,9 +148,11 @@ def try_enter_unified():
         if mode == "maker":
             px_h = h_asks[0][0]  # 卖 hedge → ask
             px_q = q_bids[0][0]  # 买 quote → bid
+            logging.info("Placing place_limit_maker orders: hedge SELL %s @ %s, quote BUY %s @ %s", h_qty, px_h, q_qty, px_q)
             o_h = hedge.place_limit_maker("SELL", h_qty, px_h)
             o_q = quote.place_limit_maker("BUY",  q_qty, px_q)
         else:
+            logging.info("Placing place_market orders: hedge SELL %s, quote BUY %s", h_qty, q_qty)
             o_h = hedge.place_market("SELL", h_qty)
             o_q = quote.place_market("BUY",  q_qty)
 
@@ -244,7 +256,8 @@ def try_enter(spread_bps: float, spot_mid: float,
         })
         return (True, Position(side="NEG", Q=Q, N=N,
                                spot_symbol=spot_symbol, coinm_symbol=coinm_symbol))
-
+    
+#to-do 用 try_enter_from_frontier 替代try_enter
 def try_enter_from_frontier(spot_bids, spot_asks, cm_bids, cm_asks,
                             contract_size, spot_step, cm_step,
                             spot_symbol: str, coinm_symbol: str):
@@ -302,6 +315,7 @@ def try_exit_unified(position: Position) -> Tuple[bool, str]:
     try_close(position)
     return (True, reason)
 
+#to-do 尝试删掉，功能和try_exit_unified一样
 def try_close(position: Position):
     """
     统一平仓：直接按当前配置的两腿对冲离场（市价）。

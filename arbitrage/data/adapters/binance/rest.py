@@ -13,50 +13,14 @@ Binance REST 适配：统一拿 depth / mark / exchangeInfo（spot/coinm/um）
     poll_loop_mark(..., interval=1.0)
 """
 from __future__ import annotations
-import os, time, json
-from dataclasses import dataclass
-from typing import List, Tuple, Optional, Dict
-
+import os, time
+from typing import Optional, Dict
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from arbitrage.data.schemas import OrderBook, MarkPrice, Meta
+from arbitrage.data.bus import Bus, Topic
 
-# ---- 兜底：schemas / bus（若尚未创建 data 层模块） ----
-try:
-    from arbitrage.data.schemas import OrderBook, MarkPrice, Meta
-except Exception:
-    @dataclass
-    class OrderBook:
-        symbol: str
-        ts: float
-        bids: List[Tuple[float, float]]
-        asks: List[Tuple[float, float]]
-
-    @dataclass
-    class MarkPrice:
-        symbol: str
-        ts: float
-        mark: float
-        index: Optional[float] = None
-
-    @dataclass
-    class Meta:
-        symbol: str
-        kind: str
-        contract_size: Optional[float] = None
-        price_tick: Optional[float] = None
-        qty_step: Optional[float] = None
-
-try:
-    from arbitrage.data.bus import Bus, Topic
-except Exception:
-    class Topic:
-        ORDERBOOK = "orderbook"
-        MARK = "mark"
-    class Bus:
-        def publish(self, topic: str, key: str, value):  # noqa
-            # 兜底：仅打印
-            print(f"[NoopBus] {topic} {key} -> {value}")
 
 # ---- 端点 & 会话 ----
 def _def(v, default):  # 小工具

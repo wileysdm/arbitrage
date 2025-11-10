@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 from dataclasses import dataclass
+import logging
 from typing import Tuple, List, Optional
 import time
 
@@ -100,9 +101,11 @@ class SpotLeg(BaseLeg):
         return V_usd / max(1e-12, self.ref_price())
 
     def place_market(self, side: str, qty: float, reduce_only: bool=False):
+        logging.info("Placing place_market order: side=%s, qty=%s, symbol=%s", side, qty, self.symbol)
         return place_spot_market("BUY" if side=="BUY" else "SELL", float(qty), symbol=self.symbol)
 
     def place_limit_maker(self, side: str, qty: float, px: float):
+        logging.info("Placing place_limit_maker order: side=%s, qty=%s, px=%s, symbol=%s", side, qty, px, self.symbol)
         return place_spot_limit_maker("BUY" if side=="BUY" else "SELL", float(qty), float(px), symbol=self.symbol)
 
     def get_order_status(self, order_id: int):
@@ -145,10 +148,12 @@ class CoinMLeg(BaseLeg):
 
     def place_market(self, side: str, qty: float, reduce_only: bool=False):
         n = int(qty)
+        logging.info("Placing place_market order: side=%s, qty=%s, symbol=%s", side, n, self.symbol)
         return place_coinm_market("BUY" if side=="BUY" else "SELL", n, reduce_only=reduce_only, symbol=self.symbol)
 
     def place_limit_maker(self, side: str, qty: float, px: float):
         n = int(qty)
+        logging.info("Placing place_limit_maker order: side=%s, qty=%s, px=%s, symbol=%s", side, n, px, self.symbol)
         return place_coinm_limit("BUY" if side=="BUY" else "SELL", n, float(px), post_only=True, symbol=self.symbol)
 
     def get_order_status(self, order_id: int):
@@ -193,6 +198,7 @@ class UMLeg(BaseLeg):
             "reduceOnly": "true" if reduce_only else "false",
             "newOrderRespType": "RESULT",
         }
+        logging.info("Placing market order: %s", params)
         return r_signed(FAPI_BASE, "/fapi/v1/order", "POST", params, UM_KEY, UM_SECRET)
 
     def place_limit_maker(self, side: str, qty: float, px: float):
@@ -205,6 +211,7 @@ class UMLeg(BaseLeg):
             "price":    f"{float(px):.2f}",
             "newOrderRespType": "RESULT",
         }
+        logging.info("Placing limit maker order: %s", params)
         return r_signed(FAPI_BASE, "/fapi/v1/order", "POST", params, UM_KEY, UM_SECRET)
 
     def get_order_status(self, order_id: int):

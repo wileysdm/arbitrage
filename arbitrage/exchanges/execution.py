@@ -1,3 +1,6 @@
+# monitor_and_rescue_single_leg 放到risk里
+# hybrid_maker_then_taker 放到logic里
+# 然后可以删除 exec_binance_hybrid.py
 # -*- coding: utf-8 -*-
 import time, math
 from arbitrage.config import (

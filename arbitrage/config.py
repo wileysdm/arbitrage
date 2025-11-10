@@ -4,6 +4,11 @@
 """
 from __future__ import annotations
 import os
+from dotenv import load_dotenv, find_dotenv
+
+_dotenv_path = find_dotenv(usecwd=True)
+if _dotenv_path:
+    load_dotenv(_dotenv_path)
 
 def _get_bool(name: str, default: bool) -> bool:
     v = os.environ.get(name)

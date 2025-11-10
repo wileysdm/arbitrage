@@ -282,17 +282,19 @@ Spot & COIN-M listenKey 自动创建/续期（无签名 POST/PUT）
 ### 8.1 安装依赖
 ```bash
 pip install requests
+pip install requests python-dotenv
+pandas
+websockets
 ```
 
 ### 8.2 设置环境变量（测试网 API）
-```bash
-# 现货
-export SPOT_KEY=your_spot_key
-export SPOT_SECRET=your_spot_secret
-# 币本位永续
-export DAPI_KEY=your_dapi_key
-export DAPI_SECRET=your_dapi_secret
+# 设置.env
+SPOT_KEY=your_spot_key
+SPOT_SECRET=your_spot_secret
+DAPI_KEY=your_dapi_key
+DAPI_SECRET=your_dapi_secret
 ```
+
 
 ### 8.3 运行
 ```bash
