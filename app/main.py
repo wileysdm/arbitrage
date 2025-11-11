@@ -3,15 +3,22 @@
 最小主程序：启动数据层 + 用户流，循环评估入场/出场
 - 环境变量配置见 config.py
 """
+
 from __future__ import annotations
 import asyncio
+import os
 import signal
 import logging
-import os
+from dotenv import load_dotenv, find_dotenv
+_dotenv_path = find_dotenv(usecwd=True)
+if _dotenv_path:
+    load_dotenv(_dotenv_path)
+
 
 from arbitrage.config import (
     HEDGE_KIND, QUOTE_KIND, HEDGE_SYMBOL, QUOTE_SYMBOL,
 )
+
 from arbitrage.data.service import boot_and_start, DataService
 from arbitrage.exchanges.user_stream import run_all_user_streams
 from arbitrage.strategy.logic import try_enter_unified, try_exit_unified
@@ -20,6 +27,7 @@ logging.basicConfig(
     format='[%(asctime)s] %(levelname)s %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
+
 class Runner:
 
     def __init__(self):
@@ -31,6 +39,9 @@ class Runner:
         regs.append((HEDGE_KIND, HEDGE_SYMBOL))
         if (QUOTE_KIND, QUOTE_SYMBOL) not in regs:
             regs.append((QUOTE_KIND, QUOTE_SYMBOL))
+
+        logging.info("environment parms: MAX_SLIPPAGE_BPS_SPOT: %s",
+                     os.environ.get("MAX_SLIPPAGE_BPS_SPOT", "unset"))
 
         # 启动数据层（WS；如需持久化把 persist=True）
         logging.info("booting data service with regs=%s", regs)

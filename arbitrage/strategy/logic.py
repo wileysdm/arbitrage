@@ -18,14 +18,9 @@ from arbitrage.utils import vwap_to_qty, append_trade_row, next_trade_id
 
 # ===== 配置常量 =====
 from arbitrage.config import (
-    ONLY_POSITIVE_CARRY, ENTER_BPS, EXIT_BPS, STOP_BPS, MAX_HOLD_SEC,
-    V_USD, MAX_SLIPPAGE_BPS_SPOT, MAX_SLIPPAGE_BPS_COINM,
-    EXECUTION_MODE, HEDGE_KIND, QUOTE_KIND, HEDGE_SYMBOL, QUOTE_SYMBOL
+    HEDGE_KIND, QUOTE_KIND, HEDGE_SYMBOL, QUOTE_SYMBOL
 )
-from arbitrage.config import (
-    HYBRID_MAKER_LEG, HYBRID_WAIT_SEC, HYBRID_MIN_FILL_RATIO,
-    PAIR_POLL_INTERVAL, DRY_RUN, EXECUTION_MODE,  
-)
+
 # 统一腿适配器
 from arbitrage.exchanges.legs import make_leg
 

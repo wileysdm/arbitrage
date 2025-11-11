@@ -8,9 +8,6 @@ Frontier（候选生成 & 逐档撮合）——轻量实现（仅 coinm↔spot �
 from __future__ import annotations
 from typing import List, Tuple, Dict
 
-from arbitrage.config import V_USD
-from arbitrage.utils import vwap_to_qty
-
 from arbitrage.exchanges.exec_binance_rest import (
     place_spot_limit_maker, place_coinm_limit,
     place_spot_market, place_coinm_market
