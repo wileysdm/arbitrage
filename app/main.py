@@ -9,11 +9,6 @@ import asyncio
 import os
 import signal
 import logging
-from dotenv import load_dotenv, find_dotenv
-_dotenv_path = find_dotenv(usecwd=True)
-if _dotenv_path:
-    load_dotenv(_dotenv_path)
-
 
 from arbitrage.config import (
     HEDGE_KIND, QUOTE_KIND, HEDGE_SYMBOL, QUOTE_SYMBOL,

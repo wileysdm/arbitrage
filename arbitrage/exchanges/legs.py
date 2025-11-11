@@ -28,10 +28,9 @@ from arbitrage.exchanges.exec_binance_rest import (
 
 # === UM 下单直连（沿用 HTTP 底座签名） ===
 from arbitrage.exchanges.binance_rest import r_signed
-import os
-FAPI_BASE = os.environ.get("FAPI_BASE", "https://fapi.binance.com")
-UM_KEY    = os.environ.get("UM_KEY", os.environ.get("SPOT_KEY", ""))
-UM_SECRET = os.environ.get("UM_SECRET", os.environ.get("SPOT_SECRET", ""))
+from arbitrage.config import (
+    UM_KEY, UM_SECRET, FAPI_BASE
+)
 
 OrderBookSide = List[Tuple[float, float]]
 SVC = DataService.global_service()   # 需先由 app/main.py 注册并 start()

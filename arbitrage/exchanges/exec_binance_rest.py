@@ -22,17 +22,9 @@ import os
 from typing import Tuple, Any
 
 from arbitrage.exchanges.binance_rest import r_signed
-# to-do: config里有，可以删除
-# ---- 端点 ----
-SPOT_BASE = os.environ.get("SPOT_BASE", "https://api.binance.com")
-DAPI_BASE = os.environ.get("DAPI_BASE", "https://dapi.binance.com")  # COIN-M
-
-# ---- KEY（默认用 SPOT_KEY/SECRET；COIN-M 可单独配置 DAPI_KEY/SECRET）----
-SPOT_KEY    = os.environ.get("SPOT_KEY", "")
-SPOT_SECRET = os.environ.get("SPOT_SECRET", "")
-
-DAPI_KEY    = os.environ.get("DAPI_KEY", SPOT_KEY)
-DAPI_SECRET = os.environ.get("DAPI_SECRET", SPOT_SECRET)
+from arbitrage.config import (
+    SPOT_BASE, DAPI_BASE, SPOT_KEY, SPOT_SECRET, DAPI_KEY, DAPI_SECRET
+)
 
 # =========================================================
 # 现货 Spot
