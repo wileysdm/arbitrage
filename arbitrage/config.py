@@ -63,4 +63,14 @@ V_USD                    = float(os.environ.get("V_USD", "1000"))       # 单次
 MAX_SLIPPAGE_BPS_SPOT    = float(os.environ.get("MAX_SLIPPAGE_BPS_SPOT", "5.0"))
 MAX_SLIPPAGE_BPS_COINM   = float(os.environ.get("MAX_SLIPPAGE_BPS_COINM","5.0"))
 
-EXECUTION_MODE           = os.environ.get("EXECUTION_MODE", "taker")    # taker/maker
+# 执行模式：仅支持 taker / hybrid默认 hybrid
+EXECUTION_MODE = os.environ.get("EXECUTION_MODE", "hybrid").lower()
+if EXECUTION_MODE not in ("taker", "hybrid"):
+    EXECUTION_MODE = "hybrid"
+
+# Hybrid 相关参数
+HYBRID_MAKER_LEG      = os.environ.get("HYBRID_MAKER_LEG", "quote").lower()  # "quote" 或 "hedge"
+HYBRID_WAIT_SEC       = float(os.environ.get("HYBRID_WAIT_SEC", "1.5"))      # 等待 maker 成交通知窗口
+HYBRID_MIN_FILL_RATIO = float(os.environ.get("HYBRID_MIN_FILL_RATIO", "0.2"))# 部分成交比例阈值
+PAIR_POLL_INTERVAL    = float(os.environ.get("PAIR_POLL_INTERVAL", "0.15"))  # 轮询间隔
+DRY_RUN               = os.environ.get("DRY_RUN", "0").lower() in ("1","true","yes","on")
