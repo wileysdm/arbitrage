@@ -28,11 +28,6 @@ from arbitrage.config import (
 # 统一腿适配器
 from arbitrage.exchanges.legs import make_leg
 
-# 兼容frontier仅 coinm↔spot 使用
-from arbitrage.strategy.frontier import (
-    collect_frontier_candidates, print_per_level_book_edge, place_entry_from_row
-)
-
 # 老执行（仅用于 coinm↔spot 的兼容入口）
 from arbitrage.exchanges.exec_binance_rest import (
     place_spot_limit_maker, place_coinm_limit,
@@ -127,6 +122,7 @@ def _collect_unified_candidates(
                 ))
 
     return rows_pos, rows_neg
+
 def _hybrid_maker_then_taker(
     side: str,                 # "POS" 或 "NEG"
     maker_leg, taker_leg,      # 传入已经构造好的两个 Leg 实例（quote/hedge 其一做 maker）
@@ -244,9 +240,11 @@ def try_enter_unified():
     q_ref = quote.ref_price()
     h_ref = hedge.ref_price()
     sp_bps_ref = _spread_bps(q_ref, h_ref)
+    logging.info("Ref prices: quote=%.4f hedge=%.4f | spread=%.2fbps", q_ref, h_ref, sp_bps_ref)
 
     # 先做参考价级别的“是否值得继续”快速拦截
     if ONLY_POSITIVE_CARRY and sp_bps_ref < 0:
+        logging.info("❌ 仅正向套利，参考价 spread=%.2fbps < 0，放弃", sp_bps_ref)
         return (False, None)
 
     # 逐档搜集候选（代替原先 try_enter_from_frontier）
@@ -255,6 +253,7 @@ def try_enter_unified():
         max_levels=10, min_bp=ENTER_BPS, min_vusd=V_USD,
         only_positive_carry=ONLY_POSITIVE_CARRY
     )
+    logging.info("Collected %d POS candidates, %d NEG candidates", len(rows_pos), len(rows_neg))
 
     # 选最佳候选
     cand = None
@@ -294,6 +293,7 @@ def try_enter_unified():
 
     # === 下单（仅 hybrid / taker）===
     if mode == "hybrid":
+        logging.info("Executing HYBRID maker_then_taker...")
         # 由 HYBRID_MAKER_LEG=quote|hedge 决定先 maker 的腿
         maker_first = (HYBRID_MAKER_LEG == "quote")
         maker_leg   = quote if maker_first else hedge

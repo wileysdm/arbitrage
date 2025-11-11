@@ -66,3 +66,6 @@ HYBRID_WAIT_SEC       = float(os.environ.get("HYBRID_WAIT_SEC", "1.5"))      # �
 HYBRID_MIN_FILL_RATIO = float(os.environ.get("HYBRID_MIN_FILL_RATIO", "0.2"))# 部分成交比例阈值
 PAIR_POLL_INTERVAL    = float(os.environ.get("PAIR_POLL_INTERVAL", "0.15"))  # 轮询间隔
 DRY_RUN               = os.environ.get("DRY_RUN", "0").lower() in ("1","true","yes","on")
+
+#os.environ['http_proxy'] = 'http://localhost:7890'
+#os.environ['https_proxy'] = 'https://localhost:7890'

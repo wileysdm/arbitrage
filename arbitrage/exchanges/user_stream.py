@@ -29,21 +29,10 @@ from arbitrage.data.bus import Bus, Topic
 from arbitrage.data.service import DataService
 
 # to-do 挪到 config.py
-# 端点
-SPOT_BASE = os.environ.get("SPOT_BASE", "https://api.binance.com")
-DAPI_BASE = os.environ.get("DAPI_BASE", "https://dapi.binance.com")
-FAPI_BASE = os.environ.get("FAPI_BASE", "https://fapi.binance.com")
-
-WS_SPOT = "wss://stream.binance.com:9443"
-WS_CM   = "wss://dstream.binance.com"
-WS_UM   = "wss://fstream.binance.com"
-
-SPOT_KEY = os.environ.get("SPOT_KEY", "")
-SPOT_SECRET = os.environ.get("SPOT_SECRET", "")
-DAPI_KEY = os.environ.get("DAPI_KEY", SPOT_KEY)
-DAPI_SECRET = os.environ.get("DAPI_SECRET", SPOT_SECRET)
-UM_KEY = os.environ.get("UM_KEY", SPOT_KEY)
-UM_SECRET = os.environ.get("UM_SECRET", SPOT_SECRET)
+from arbitrage.config import (
+    SPOT_BASE, DAPI_BASE, FAPI_BASE, SPOT_KEY, SPOT_SECRET, DAPI_KEY, DAPI_SECRET, 
+    UM_KEY, UM_SECRET, WS_CM, WS_UM, WS_SPOT
+)
 
 KEEPALIVE_SEC = 30 * 60
 
