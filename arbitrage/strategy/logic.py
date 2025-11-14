@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import time, math
 import logging
-from typing import Tuple, List
-
+from typing import Any, Dict, Tuple, List
+from arbitrage.data.adapters.binance import rest
 from arbitrage.data.schemas import Position
 from arbitrage.utils import vwap_to_qty, append_trade_row, next_trade_id
 
@@ -54,7 +54,7 @@ def _slip_threshold(kind: str) -> float:
     return MAX_SLIPPAGE_BPS_COINM if kind == "coinm" else MAX_SLIPPAGE_BPS_SPOT
 
 def _spread_bps(quote_px: float, hedge_px: float) -> float:
-    return (quote_px - hedge_px) / max(1e-12, hedge_px) * 10000.0
+    return (quote_px - hedge_px) / hedge_px * 10000.0
 
 # ===== 新增：逐档候选收集（统一 legs）=====
 def _collect_unified_candidates(
@@ -120,6 +120,65 @@ def _collect_unified_candidates(
                     q_qty=q_qty_neg, h_qty=h_qty_neg,
                     edge_bps=edge_neg
                 ))
+
+    return rows_pos, rows_neg
+
+def _get_candidate(
+    q_bids: List[Tuple[float, float]], q_asks: List[Tuple[float, float]],
+    h_bids: List[Tuple[float, float]], h_asks: List[Tuple[float, float]],
+    min_bp: float,
+    only_positive_carry: bool = True
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    【简化版】只基于 Level 1 价格，筛选潜在的套利候选机会。
+
+    :param q_bids/q_asks/h_bids/h_asks: 订单簿深度数据（只需要第一个元素）
+    :param min_bp: 最小入场价差（基点）
+    :param min_vusd: 最小名义成交额（USD）
+    :param only_positive_carry: 是否只考虑正向套利
+    :return: (rows_pos, rows_neg)，只包含 Level 1 且满足条件的候选
+    """
+    
+    # 检查是否有 Level 1 数据
+    if not (q_bids and q_asks and h_bids and h_asks):
+        # 订单簿不完整，无法进行 Level 1 匹配
+        return [], []
+    rows_pos, rows_neg = [], []
+
+    # --- 1. 正向：买 hedge(ask[0]) / 卖 quote(ask[0]) ---
+    # Level 1 价格
+    px_h_pos = h_asks[0][0]
+    px_q_pos = q_asks[0][0]
+    aa_spread = _spread_bps(px_q_pos, px_h_pos) 
+
+    # Level 1 数量
+    h_cap_pos = float(h_asks[0][1])
+    q_cap_pos = float(q_asks[0][1])
+    
+    if aa_spread >= min_bp:
+        rows_pos.append(dict(
+            side="POS", level=1, # Level=1
+            px_quote=px_q_pos, px_hedge=px_h_pos,
+            q_qty=q_cap_pos, h_qty=h_cap_pos,
+            edge_bps=aa_spread
+        ))
+
+    # --- 2. 反向：卖 hedge(bid[0]) / 买 quote(ask[0]) ---
+    if not only_positive_carry:
+        px_h_neg = h_bids[0][0]
+        px_q_neg = q_bids[0][0]
+        bb_spread = _spread_bps(px_q_neg, px_h_neg)  # NEG 目标：edge <= -min_bp
+
+        h_cap_neg = float(h_bids[0][1])
+        q_cap_neg = float(q_bids[0][1])
+        
+        if bb_spread <= -min_bp:
+            rows_neg.append(dict(
+                side="NEG", level=1, # Level=1
+                px_quote=px_q_neg, px_hedge=px_h_neg,
+                q_qty=q_cap_neg, h_qty=h_cap_neg,
+                edge_bps=bb_spread
+            ))
 
     return rows_pos, rows_neg
 
@@ -235,22 +294,49 @@ def try_enter_unified():
     hedge = make_leg(HEDGE_KIND, HEDGE_SYMBOL)
 
     # 取盘口与参考价
-    q_bids, q_asks = quote.get_books(limit=10)
-    h_bids, h_asks = hedge.get_books(limit=10)
+    q_bids, q_asks = quote.get_books(limit=1)
+    h_bids, h_asks = hedge.get_books(limit=1)
     q_ref = quote.ref_price()
     h_ref = hedge.ref_price()
     sp_bps_ref = _spread_bps(q_ref, h_ref)
     logging.info("Ref prices: quote=%.4f hedge=%.4f | spread=%.2fbps", q_ref, h_ref, sp_bps_ref)
 
     # 先做参考价级别的“是否值得继续”快速拦截
-    if ONLY_POSITIVE_CARRY and sp_bps_ref < 0:
-        logging.info("❌ 仅正向套利，参考价 spread=%.2fbps < 0，放弃", sp_bps_ref)
+    #if ONLY_POSITIVE_CARRY and sp_bps_ref < 0:
+    #    logging.info("❌ 仅正向套利，参考价 spread=%.2fbps < 0，放弃", sp_bps_ref)
+    #    return (False, None)
+
+    # 获取两腿上一分钟的成交额
+    try:
+        logging.info("quote.symbol=%s hedge.symbol=%s", quote.symbol, hedge.symbol)
+        V_q_last_min = float(rest.get_last_minute_volume(quote.symbol, QUOTE_KIND))
+        V_h_last_min = float(rest.get_last_minute_volume(hedge.symbol, HEDGE_KIND))
+    except Exception as e:
+        logging.error("获取上一分钟成交额失败: %s", e)
         return (False, None)
 
-    # 逐档搜集候选（代替原先 try_enter_from_frontier）
-    rows_pos, rows_neg = _collect_unified_candidates(
-        quote, hedge, q_bids, q_asks, h_bids, h_asks,
-        max_levels=10, min_bp=ENTER_BPS, min_vusd=V_USD,
+    # 计算 1% 的流动性上限
+    logging.info("上一分钟成交额：quote=%.2f USD hedge=%.2f USD", V_q_last_min, V_h_last_min)
+    V_q_cap_1pct = V_q_last_min * 0.01
+    V_h_cap_1pct = V_h_last_min * 0.01
+    
+    # 比较：计划投入资金 V_USD (名义目标) 是否小于上限
+    V_trade = V_USD # V_USD 是您计划投入的名义目标
+
+    # 需要满足两腿同时小于各自的 1% 上限
+    if V_trade > V_q_cap_1pct or V_trade > V_h_cap_1pct:
+        logging.info(
+            "❌ 流动性不足。V_USD=%.2f超限。Q上限:%.2f (1%% of %.2f), H上限:%.2f (1%% of %.2f)",
+            V_trade, V_q_cap_1pct, V_q_last_min, V_h_cap_1pct, V_h_last_min
+        )
+        return (False, None)
+    
+    logging.info("✅ 流动性检查通过。投入资金 V_USD=%.2f 在两腿 1%% 范围内。", V_trade)
+
+    # 改成直接按照卖一价候选 
+    rows_pos, rows_neg = _get_candidate(
+        q_bids, q_asks, h_bids, h_asks,
+        min_bp=ENTER_BPS, 
         only_positive_carry=ONLY_POSITIVE_CARRY
     )
     logging.info("Collected %d POS candidates, %d NEG candidates", len(rows_pos), len(rows_neg))
