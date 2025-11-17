@@ -38,12 +38,26 @@ QUOTE_KIND = os.environ.get("QUOTE_KIND", "coinm").lower()
 
 HEDGE_SYMBOL = os.environ.get(
     "HEDGE_SYMBOL",
+    # 现货对：直接用 SPOT_SYMBOL
     SPOT_SYMBOL if HEDGE_KIND == "spot"
-    else (f"{PAIR}USDT" if HEDGE_KIND in ("usdtm","usdcm") else COINM_SYMBOL)
+    else (
+        # 币本位：用 COINM_SYMBOL
+        COINM_SYMBOL if HEDGE_KIND == "coinm"
+        # USDC 本位：PAIRUSDC
+        else f"{PAIR}USDC" if HEDGE_KIND in "usdcm"
+        # 其它线性合约默认按 USDT 本位处理：PAIRUSDT
+        else f"{PAIR}USDT"
+    )
 )
+
 QUOTE_SYMBOL = os.environ.get(
     "QUOTE_SYMBOL",
-    COINM_SYMBOL if QUOTE_KIND == "coinm" else f"{PAIR}USDT"
+    # 币本位：用 COINM_SYMBOL
+    COINM_SYMBOL if QUOTE_KIND == "coinm"
+    # USDC 本位报价腿：PAIRUSDC
+    else f"{PAIR}USDC" if QUOTE_KIND in "usdcm"
+    # 其余：PAIRUSDT
+    else f"{PAIR}USDT"
 )
 
 # —— 策略参数 ——

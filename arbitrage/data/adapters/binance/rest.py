@@ -127,46 +127,45 @@ def get_meta(kind: str, symbol: str) -> Meta:
 
 
 def get_last_minute_volume(symbol: str, type: str) -> dict:
-    '''获取现货币种一分钟成交量''' 
-    # 构建请求参数
+    '''获取现货/合约一分钟成交额（统一成 quote 计价）''' 
     params = {
-        'symbol': symbol.upper(),  # 确保交易对是大写
-        'interval': '1m',          # 设置 K 线间隔为 1 分钟
-        'limit': 1                 # 只需要最近的 1 根 K 线
+        'symbol': symbol.upper(),
+        'interval': '1m',
+        'limit': 1
     }
-    if type=="spot":
+    if type == "spot":
         full_url = SPOT_BASE + "/api/v3/klines"
-    elif type=="coinm":
+    elif type == "coinm":
         full_url = DAPI_BASE + "/dapi/v1/klines"
     else:
         full_url = FAPI_BASE + "/fapi/v1/klines"
     
     try:
-        # 发送 GET 请求
         response = requests.get(full_url, params=params, timeout=10)
-        
-        # 检查 HTTP 状态码
+
         if response.status_code != 200:
             print(f"请求失败，状态码: {response.status_code}")
             print(f"错误信息: {response.text}")
             return None
-        
-        # 解析 JSON 响应
+
         klines_data = response.json()
-        
         if not klines_data:
             print(f"未找到 {symbol} 的 K 线数据。")
             return None
-        
-        # Klines 响应是一个列表的列表，我们取第一个元素（最近的一根 K 线）
-        # 字段索引（从 0 开始）：
-        # [7] 成交额 (Quote Asset Volume),
-        
+
         last_kline = klines_data[0]
-        value_of_trades = last_kline[7] # 成交额
- 
+
+        if type == "coinm":
+            # 币本位：[7] 是标的数量，* 收盘价 = 以 USD 计价的成交额
+            base_qty = float(last_kline[7])   # 标的数量（比如 BTC）
+            close_px = float(last_kline[4])   # 收盘价（USD）
+            value_of_trades = base_qty * close_px
+        else:
+            # 现货 & U 本位：[7] 本身就是 quoteAssetVolume（USDT 成交额）
+            value_of_trades = float(last_kline[7])
+
         return value_of_trades
-        
+
     except requests.exceptions.RequestException as e:
         print(f"请求发生异常: {e}")
         return None
@@ -176,6 +175,7 @@ def get_last_minute_volume(symbol: str, type: str) -> dict:
     except IndexError:
         print("响应数据格式不正确，无法解析 K 线字段。")
         return None
+
     
 # ---- 发布（可选） ----
 def poll_once_orderbook(kind: str, symbol: str, bus: Bus):
