@@ -126,54 +126,81 @@ def get_meta(kind: str, symbol: str) -> Meta:
     return Meta(symbol=sym, kind=kind, contract_size=cs, price_tick=price_tick, qty_step=qty_step)
 
 
-def get_last_minute_volume(symbol: str, type: str) -> dict:
-    '''获取现货/合约一分钟成交额（统一成 quote 计价）''' 
+_last_minute_volume_cache = {}  # (symbol, kind) -> (ts, value)
+
+def get_last_minute_volume(symbol: str, kind: str) -> float | None:
+    """
+    获取现货 / 合约最近 1 分钟成交额（统一为 quote 计价），带本地缓存以避免频繁 REST 调用。
+
+    参数：
+        symbol: 交易对，如 "BTCUSDT" / "BTCUSD_PERP"
+        kind  : "spot" / "coinm" / "usdtm" / "usdcm"
+    返回：
+        成交额（quote 计价，单位约为 USD/USDT），失败时返回 None
+    """
+    import time
+
+    sym_u = symbol.upper()
+    k = (kind or "").lower()
+    key = (sym_u, k)
+
+    # 从环境变量控制 TTL，默认 5 秒
+    ttl = float(os.environ.get("LAST_MINUTE_VOLUME_TTL", "5"))
+
+    now = time.time()
+    cached = _last_minute_volume_cache.get(key)
+    if cached is not None:
+        ts, val = cached
+        if now - ts < ttl:
+            return val
+
     params = {
-        'symbol': symbol.upper(),
-        'interval': '1m',
-        'limit': 1
+        "symbol": sym_u,
+        "interval": "1m",
+        "limit": 1,
     }
-    if type == "spot":
+
+    if k == "spot":
         full_url = SPOT_BASE + "/api/v3/klines"
-    elif type == "coinm":
+    elif k == "coinm":
         full_url = DAPI_BASE + "/dapi/v1/klines"
-    else:
+    else:  # usdtm / usdcm
         full_url = FAPI_BASE + "/fapi/v1/klines"
-    
+
     try:
-        response = requests.get(full_url, params=params, timeout=10)
-
-        if response.status_code != 200:
-            print(f"请求失败，状态码: {response.status_code}")
-            print(f"错误信息: {response.text}")
+        # 这里直接用 requests.get，已经有全局代理配置；若想重用重试 session 也可以改为 _session().get(...)
+        resp = requests.get(full_url, params=params, timeout=3.0)
+        resp.raise_for_status()
+        data = resp.json()
+        if not data:
             return None
+        kline = data[0]
+        # Binance K 线字段：
+        # 0 open time
+        # 1 open
+        # 2 high
+        # 3 low
+        # 4 close
+        # 5 volume (base asset)
+        # 6 close time
+        # 7 quote asset volume
+        close_price = float(kline[4])
+        base_vol = float(kline[5])
+        quote_vol = float(kline[7])
 
-        klines_data = response.json()
-        if not klines_data:
-            print(f"未找到 {symbol} 的 K 线数据。")
-            return None
-
-        last_kline = klines_data[0]
-
-        if type == "coinm":
-            # 币本位：[7] 是标的数量，* 收盘价 = 以 USD 计价的成交额
-            base_qty = float(last_kline[7])   # 标的数量（比如 BTC）
-            close_px = float(last_kline[4])   # 收盘价（USD）
-            value_of_trades = base_qty * close_px
+        if k == "coinm":
+            # 币本位接口返回的 volume 一般是合约张数 * 合约面值 / 标的价格
+            # 这里用 close * base_vol 近似转成 quote 金额
+            value = base_vol * close_price
         else:
-            # 现货 & U 本位：[7] 本身就是 quoteAssetVolume（USDT 成交额）
-            value_of_trades = float(last_kline[7])
+            # 现货 / U 本位直接用 quote volume，近似 USD/USDT
+            value = quote_vol
 
-        return value_of_trades
+        _last_minute_volume_cache[key] = (now, value)
+        return value
 
-    except requests.exceptions.RequestException as e:
-        print(f"请求发生异常: {e}")
-        return None
-    except json.JSONDecodeError:
-        print("响应数据解析失败，不是有效的 JSON 格式。")
-        return None
-    except IndexError:
-        print("响应数据格式不正确，无法解析 K 线字段。")
+    except Exception as e:
+        print(f"[REST last_minute_volume] error for {kind}:{sym_u}: {e}")
         return None
 
     
