@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import time, math
 import logging
-from typing import Any, Dict, Tuple, List
+from typing import Any, Dict, Tuple, List, Optional
 from arbitrage.data.adapters.binance import rest
 from arbitrage.data.schemas import Position
 from arbitrage.utils import vwap_to_qty, append_trade_row, next_trade_id
@@ -61,8 +61,8 @@ def _collect_unified_candidates(
     quote, hedge,
     q_bids, q_asks, h_bids, h_asks,
     max_levels: int = 10,
-    min_bp: float = None,
-    min_vusd: float = None,
+    min_bp: Optional[float] = None,
+    min_vusd: Optional[float] = None,
     only_positive_carry: bool = True,
 ):
     """
@@ -309,8 +309,16 @@ def try_enter_unified():
     # 获取两腿上一分钟的成交额
     try:
         logging.info("quote.symbol=%s hedge.symbol=%s", quote.symbol, hedge.symbol)
-        V_q_last_min = float(rest.get_last_minute_volume(quote.symbol, QUOTE_KIND))
-        V_h_last_min = float(rest.get_last_minute_volume(hedge.symbol, HEDGE_KIND))
+        if not hasattr(quote, "symbol") or quote.symbol is None:
+            raise AttributeError("The 'quote' object does not have a valid 'symbol' attribute.")
+        last_minute_volume = rest.get_last_minute_volume(quote.symbol, QUOTE_KIND)
+        if last_minute_volume is None:
+            raise ValueError(f"Failed to fetch last minute volume for symbol: {quote.symbol}")
+        V_q_last_min = float(last_minute_volume)
+        h_volume = rest.get_last_minute_volume(getattr(hedge, "symbol", ""), HEDGE_KIND)
+        if h_volume is None:
+            raise ValueError(f"Failed to fetch last minute volume for hedge symbol: {getattr(hedge, 'symbol', '')}")
+        V_h_last_min = float(h_volume)
     except Exception as e:
         logging.error("获取上一分钟成交额失败: %s", e)
         return (False, None)

@@ -9,6 +9,8 @@ import asyncio
 import os
 import signal
 import logging
+import json
+from typing import Optional
 
 from arbitrage.config import (
     HEDGE_KIND, QUOTE_KIND, HEDGE_SYMBOL, QUOTE_SYMBOL,
@@ -16,6 +18,7 @@ from arbitrage.config import (
 
 from arbitrage.data.service import boot_and_start, DataService
 from arbitrage.exchanges.user_stream import run_all_user_streams
+from arbitrage.data.schemas import Position
 from arbitrage.strategy.logic import try_enter_unified, try_exit_unified
 logging.basicConfig(
     level=logging.INFO,
@@ -24,10 +27,34 @@ logging.basicConfig(
 )
 
 class Runner:
+    STATE_FILE = "runner_state.json"
 
     def __init__(self):
-        self.pos = None
+        self.pos: Optional[Position] = None
         self._stopping = False
+        self._load_state()
+
+    def _load_state(self):
+        if os.path.exists(self.STATE_FILE):
+            try:
+                with open(self.STATE_FILE, 'r') as f:
+                    state = json.load(f)
+                    pos_data = state.get('pos')
+                    if pos_data:
+                        self.pos = Position.from_dict(pos_data)
+                        logging.info("loaded position from state file: %s", self.pos)
+            except (json.JSONDecodeError, IOError, TypeError) as e:
+                logging.error("failed to load state from %s: %s", self.STATE_FILE, e)
+                self.pos = None
+
+    def _save_state(self):
+        try:
+            with open(self.STATE_FILE, 'w') as f:
+                # 如果有持仓，调用 to_dict() 方法转换为字典
+                pos_to_save = self.pos.to_dict() if self.pos else None
+                json.dump({'pos': pos_to_save}, f, indent=4)
+        except (IOError, TypeError) as e:
+            logging.error("failed to save state to %s: %s", self.STATE_FILE, e)
 
     async def start(self):
         regs = []
@@ -59,12 +86,14 @@ class Runner:
                     ok, pos = try_enter_unified()
                     if ok:
                         self.pos = pos
+                        self._save_state()
                         logging.info("entered position: %s", pos)
                 else:
                     trig, reason = try_exit_unified(self.pos)
                     if trig:
                         logging.info("[EXIT] %s", reason)
                         self.pos = None
+                        self._save_state()
             except Exception as e:
                 # log full stack
                 logging.exception("[MAIN] error during main loop")

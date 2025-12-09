@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # arbitrage/data/schemas.py
 from __future__ import annotations
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from time import time
 from typing import List, Tuple, Optional, Literal
 
@@ -48,4 +48,13 @@ class Position:
     spot_symbol: str = ""
     coinm_symbol: str = ""
     trade_id: int = 0
-    t0: float = field(default_factory=lambda: time.time())
+    t0: float = field(default_factory=lambda: time)
+
+    def to_dict(self) -> dict:
+        """将 Position 实例转换为字典。"""
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> Position:
+        """从字典创建 Position 实例。"""
+        return cls(**data)
