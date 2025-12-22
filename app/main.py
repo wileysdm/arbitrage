@@ -9,6 +9,7 @@ import asyncio
 import os
 import signal
 import logging
+from logging.handlers import RotatingFileHandler
 import json
 from typing import Optional
 
@@ -17,14 +18,35 @@ from arbitrage.config import (
 )
 
 from arbitrage.data.service import boot_and_start, DataService
+from arbitrage.data.bus import Topic
 from arbitrage.exchanges.user_stream import run_all_user_streams
 from arbitrage.data.schemas import Position
 from arbitrage.strategy.logic import try_enter_unified, try_exit_unified
-logging.basicConfig(
-    level=logging.INFO,
-    format='[%(asctime)s] %(levelname)s %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
+from arbitrage.strategy.pending import GlobalPendingManager
+
+# --- 全局日志配置 ---
+log_formatter = logging.Formatter('[%(asctime)s] %(levelname)s %(filename)s:%(lineno)d - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+log_file = f'{HEDGE_SYMBOL}_{QUOTE_SYMBOL}.log'
+
+# 文件日志处理器，带轮换
+file_handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=5, encoding='utf-8')
+file_handler.setFormatter(log_formatter)
+file_handler.setLevel(logging.INFO)
+
+# 控制台日志处理器
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(log_formatter)
+stream_handler.setLevel(logging.INFO)
+
+# 获取根 logger 并添加处理器
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+# 清除所有现有的处理器，以防万一
+if root_logger.hasHandlers():
+    root_logger.handlers.clear()
+root_logger.addHandler(file_handler)
+root_logger.addHandler(stream_handler)
+# --- 日志配置结束 ---
 
 class Runner:
     STATE_FILE = "runner_state.json"
@@ -33,6 +55,15 @@ class Runner:
         self.pos: Optional[Position] = None
         self._stopping = False
         self._load_state()
+
+    async def _listen_for_fills(self):
+        """订阅并处理来自 user_stream 的成交事件"""
+        bus = DataService.global_service().bus
+        logging.info("subscribing to execution fills")
+        # Wildcard subscription to get all fills
+        async for key, fill_data in bus.subscribe(Topic.EXEC_FILLS):
+            await GlobalPendingManager.on_fill(fill_data)
+            logging.debug("received fill for market %s: %s", key, fill_data)
 
     def _load_state(self):
         if os.path.exists(self.STATE_FILE):
@@ -75,6 +106,9 @@ class Runner:
         enable_cm   = (HEDGE_KIND=="coinm" or QUOTE_KIND=="coinm")
         asyncio.create_task(run_all_user_streams(enable_spot=enable_spot, enable_um=enable_um, enable_cm=enable_cm))
 
+        # 启动成交事件监听
+        asyncio.create_task(self._listen_for_fills())
+
         logging.info("starting main loop")
         # 主循环
         await self.loop()
@@ -83,7 +117,7 @@ class Runner:
         while not self._stopping:
             try:
                 if self.pos is None:
-                    ok, pos = try_enter_unified()
+                    ok, pos = await try_enter_unified()
                     if ok:
                         self.pos = pos
                         self._save_state()

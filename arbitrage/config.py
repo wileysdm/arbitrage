@@ -34,7 +34,7 @@ COINM_SYMBOL  = os.environ.get("COINM_SYMBOL",  f"{PAIR}USD_PERP")
 
 # 腿类型：'spot' | 'coinm' | 'usdtm' | 'usdcm'
 HEDGE_KIND = os.environ.get("HEDGE_KIND", "spot").lower()
-QUOTE_KIND = os.environ.get("QUOTE_KIND", "coinm").lower()
+QUOTE_KIND = os.environ.get("QUOTE_KIND", "usdtm").lower()
 
 HEDGE_SYMBOL = os.environ.get(
     "HEDGE_SYMBOL",
@@ -61,10 +61,10 @@ QUOTE_SYMBOL = os.environ.get(
 )
 
 # —— 策略参数 ——
-ONLY_POSITIVE_CARRY      = bool(os.environ.get("ONLY_POSITIVE_CARRY", "False"))
+ONLY_POSITIVE_CARRY      = os.environ.get("ONLY_POSITIVE_CARRY", "False").lower() in ("1","true","yes","on")
 ENTER_BPS                = float(os.environ.get("ENTER_BPS", "2.0"))    # 触发开仓阈值（bps）
 EXIT_BPS                 = float(os.environ.get("EXIT_BPS",  "0.5"))    # 盈利退出 bps
-STOP_BPS                 = float(os.environ.get("STOP_BPS",  "10.0"))   # 止损 bps
+STOP_BPS                 = float(os.environ.get("STOP_BPS",  "100.0"))   # 止损 bps
 MAX_HOLD_SEC             = int(os.environ.get("MAX_HOLD_SEC", "1800"))  # 强制离场秒数（默认30min）
 
 V_USD                    = float(os.environ.get("V_USD", "1000"))       # 单次名义本金（USD）

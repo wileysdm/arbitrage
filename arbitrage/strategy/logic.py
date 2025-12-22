@@ -28,11 +28,8 @@ from arbitrage.config import (
 # 统一腿适配器
 from arbitrage.exchanges.legs import make_leg
 
-# 老执行（仅用于 coinm↔spot 的兼容入口）
-from arbitrage.exchanges.exec_binance_rest import (
-    place_spot_limit_maker, place_coinm_limit,
-    place_spot_market, place_coinm_market
-)
+# 导入新的挂单管理器
+from arbitrage.strategy.pending import GlobalPendingManager
 
 OrderBookSide = List[Tuple[float, float]]
 
@@ -182,7 +179,7 @@ def _get_candidate(
 
     return rows_pos, rows_neg
 
-def _hybrid_maker_then_taker(
+async def _hybrid_maker_then_taker(
     side: str,                 # "POS" 或 "NEG"
     maker_leg, taker_leg,      # 传入已经构造好的两个 Leg 实例（quote/hedge 其一做 maker）
     maker_qty: float,          # maker 腿目标数量（base 或 张）
@@ -191,96 +188,93 @@ def _hybrid_maker_then_taker(
     taker_bids, taker_asks,    # taker 腿盘口（这里只用于日志或你后续要做风控）
 ) -> bool:
     """
-    先在 maker_leg 下 LIMIT_MAKER；在 HYBRID_WAIT_SEC 内若累计成交比例 ≥ HYBRID_MIN_FILL_RATIO，
-    立即在另一腿（taker_leg）用 MARKET 对冲匹配规模。否则撤单放弃。
+    事件驱动版本：先在 maker_leg 下 LIMIT_MAKER，然后等待来自 User Stream 的成交事件。
+    一旦收到成交回报，立即在另一腿（taker_leg）用 MARKET 对冲。
     """
     if DRY_RUN:
         print(f"[DRY][HYB] side={side} maker={getattr(maker_leg,'symbol','?')} taker={getattr(taker_leg,'symbol','?')} "
               f"maker_qty={maker_qty:.8f} taker_qty={taker_qty:.8f}")
         return True
 
-    # —— 1) 决定 maker 腿的买卖方向（根据 side 和 maker_leg 属于哪条腿）——
-    # 规则：
-    #   POS：hedge BUY, quote SELL
-    #   NEG：hedge SELL, quote BUY
+    # —— 1) 决定 maker 腿的买卖方向和价格 ——
     if maker_leg is taker_leg:
         raise ValueError("maker_leg 与 taker_leg 不能相同")
 
-    # maker 是 hedge 还是 quote？
-    maker_is_hedge = (maker_leg.symbol.upper() == getattr(maker_leg, "symbol", "").upper()) and \
-                     (maker_leg is not None)  # 只是避免 IDE 报告；真正判断用调用处传参语义
+    maker_is_hedge = (maker_leg.symbol.upper() == HEDGE_SYMBOL.upper())
 
-    # 更明确的方向映射：
-    # 如果 maker 是 hedge：POS→BUY，NEG→SELL
-    # 如果 maker 是 quote：POS→SELL，NEG→BUY
     if maker_is_hedge:
         maker_side = "BUY" if side == "POS" else "SELL"
-    else:
+    else: # maker is quote
         maker_side = "SELL" if side == "POS" else "BUY"
 
-    # 选 post-only 价：BUY→bid，SELL→ask
     if maker_side == "BUY":
         maker_px = maker_bids[0][0] if maker_bids else None
     else:
         maker_px = maker_asks[0][0] if maker_asks else None
+    
     if maker_px is None:
-        print("[HYB] maker 侧无可用价位")
+        logging.warning("[HYB] maker 侧无可用价位")
         return False
 
-    # —— 2) 下 maker 限价（LIMIT_MAKER / GTX）——
+    # —— 2) 下 maker 限价单（LIMIT_MAKER / GTX）——
     try:
         o = maker_leg.place_limit_maker(maker_side, maker_qty, maker_px)
         maker_oid = (o or {}).get("orderId")
+        if not maker_oid:
+            raise ValueError("下单后未能获取 orderId")
     except Exception as e:
-        print(f"[HYB] maker 下单失败: {e}")
+        logging.error(f"[HYB] maker 下单失败: {e}")
         return False
 
-    # —— 3) 轮询等待部分成交 —— 
-    filled = 0.0
-    t0 = time.time()
-    while time.time() - t0 < HYBRID_WAIT_SEC:
-        try:
-            st, cum = maker_leg.get_order_status(maker_oid, maker_leg.symbol)
-            filled = max(filled, float(cum or 0.0))
-        except Exception as e:
-            print(f"[HYB] 查单失败: {e}")
-        ratio = filled / max(1e-12, maker_qty)
-        if ratio >= HYBRID_MIN_FILL_RATIO:
-            break
-        time.sleep(PAIR_POLL_INTERVAL)
+    logging.info(f"[HYB] Maker order {maker_oid} placed. Waiting for fill...")
 
-    if filled <= 0.0:
-        # 未成交 → 撤单放弃
+    # —— 3) 等待成交事件 ——
+    fill_data = await GlobalPendingManager.register(
+        maker_oid,
+        maker_leg.symbol,
+        taker_leg.symbol,
+        timeout=HYBRID_WAIT_SEC
+    )
+
+    if not fill_data:
+        # 超时未成交 → 尝试撤单
+        logging.warning(f"[HYB] Maker order {maker_oid} 未在 {HYBRID_WAIT_SEC}s 内成交，尝试撤单")
         try:
             maker_leg.cancel(maker_oid)
-        except Exception:
-            pass
-        print("[HYB] maker 未成交，撤单放弃")
+        except Exception as e:
+            logging.error(f"[HYB] 撤销 maker order {maker_oid} 失败: {e}")
         return False
 
-    # —— 4) 按实际已成比例，对冲另一腿的市价规模 —— 
-    scale = min(1.0, filled / max(1e-12, maker_qty))
+    # —— 4) 收到成交事件，计算并执行 Taker 对冲 ——
+    filled_qty = float(fill_data.get("lastQty", 0.0))
+    if filled_qty <= 0:
+        logging.warning(f"[HYB] 成交事件中的 lastQty 为 0，不执行对冲. Data: {fill_data}")
+        return False
+
+    # 按实际已成比例，对冲另一腿的市价规模
+    scale = filled_qty / max(1e-12, maker_qty)
     taker_filled_qty = taker_qty * scale
 
-    # taker 方向与 side、腿别的映射：
-    #   对 hedge 腿：POS→SELL，NEG→BUY
-    #   对 quote 腿：POS→BUY， NEG→SELL
+    # 决定 taker 腿的方向
     taker_is_hedge = not maker_is_hedge
     if taker_is_hedge:
         taker_side = "SELL" if side == "POS" else "BUY"
-    else:
+    else: # taker is quote
         taker_side = "BUY" if side == "POS" else "SELL"
+
+    logging.info(f"[HYB] Maker order {maker_oid} filled {filled_qty}. Executing taker leg: {taker_side} {taker_filled_qty} of {taker_leg.symbol}")
 
     try:
         taker_leg.place_market(taker_side, taker_filled_qty, reduce_only=taker_leg.is_perp())
     except Exception as e:
-        print(f"[HYB] taker 对冲失败: {e}")
+        logging.error(f"[HYB] taker 对冲失败: {e}")
+        # 这里需要考虑补偿逻辑，例如立即市价平掉 maker 腿的仓位
         return False
 
     return True
 
 
-def try_enter_unified():
+async def try_enter_unified():
     """
     两腿（quote & hedge）统一处理（内含逐档候选/价值加权逻辑）：
       - ref_price：perp 用 mark，spot 用 mid
@@ -360,6 +354,7 @@ def try_enter_unified():
             cand = neg_best
 
     if not cand:
+        logging.debug("No valid arbitrage candidate found in this cycle.")
         return (False, None)
 
     side      = cand["side"]
@@ -395,7 +390,7 @@ def try_enter_unified():
         maker_bids, maker_asks = (q_bids, q_asks) if maker_first else (h_bids, h_asks)
         taker_bids, taker_asks = (h_bids, h_asks) if maker_first else (q_bids, q_asks)
 
-        ok = _hybrid_maker_then_taker(
+        ok = await _hybrid_maker_then_taker(
             side,
             maker_leg, taker_leg,
             q_qty if maker_first else h_qty,
@@ -461,9 +456,14 @@ def try_exit_unified(position: Position) -> Tuple[bool, str]:
     if not reason and held_sec >= MAX_HOLD_SEC:
         reason = f"HOLD {held_sec:.1f}s >= {MAX_HOLD_SEC}s"
     if not reason:
+        logging.debug(
+            "Exit condition not met. Side: %s, Current Spread: %.2f bps, Held: %.1f s",
+            position.side, sp_bps, held_sec
+        )
         return (False, "")
 
     # ===== 触发 → 直接在此处执行平仓（原 try_close 内联） =====
+    logging.info("Exit triggered! Reason: %s. Closing position: %s", reason, position)
     # 计算两腿需要对冲的数量：
     # - 对于 coinm：优先用 position.N（张数）；其他腿（spot/UM）用 position.Q（base数量）；
     # - 若 position 里没记录可用数量（如 UM 腿），按名义 V_USD 估算数量；
