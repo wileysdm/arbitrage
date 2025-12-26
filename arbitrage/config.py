@@ -29,15 +29,23 @@ WS_PM = os.environ.get("WS_PM", "wss://fstream.binance.com/pm")
 PAPI_KEY    = os.environ.get("PAPI_KEY"   , "")
 PAPI_SECRET = os.environ.get("PAPI_SECRET", "")
 
+# —— 账户/资金日志展示 ——
+ACCOUNT_LOG_INTERVAL_SEC = float(os.environ.get("ACCOUNT_LOG_INTERVAL_SEC", "60"))
+
 # —— 标的与腿类型 ——（并列）
 PAIR = os.environ.get("PAIR", "BTC")
 SPOT_SYMBOL   = os.environ.get("SPOT_SYMBOL",   f"{PAIR}USDT")
 COINM_SYMBOL  = os.environ.get("COINM_SYMBOL",  f"{PAIR}USD_PERP")
 
-# 腿类型：'coinm' | 'usdtm' | 'usdcm'
-# 统一账户版本不再支持 spot 腿（避免误走非 PAPI 下单/UDS 体系）。
+# 腿类型：'spot' | 'coinm' | 'usdtm' | 'usdcm'
+# 统一账户下 spot 腿走 PAPI Cross Margin：/papi/v1/margin/order
 HEDGE_KIND = os.environ.get("HEDGE_KIND", "coinm").lower()
 QUOTE_KIND = os.environ.get("QUOTE_KIND", "usdtm").lower()
+
+# spot/margin 下单 sideEffectType：
+# - NO_SIDE_EFFECT: 只用现有余额
+# - MARGIN_BUY / AUTO_REPAY / AUTO_BORROW_REPAY 等：允许自动借款/借还（按需开启）
+MARGIN_SIDE_EFFECT_TYPE = os.environ.get("MARGIN_SIDE_EFFECT_TYPE", "").strip()
 
 HEDGE_SYMBOL = os.environ.get(
     "HEDGE_SYMBOL",

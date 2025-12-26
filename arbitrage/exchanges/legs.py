@@ -2,9 +2,10 @@
 # arbitrage/exchanges/legs.py
 """统一腿适配器（统一账户 / PAPI 版本）。
 
-- 只保留 CoinMLeg / UMLeg（USDT-M/USDC-M）
+- 支持：Spot(=PM Cross Margin), Coin-M, UM（USDT-M/USDC-M）
 - 行情：优先从 DataService.bus.latest(...) 读取；若缺失则 REST 兜底
 - 下单：
+    - Spot/Margin：PAPI /papi/v1/margin/order
     - Coin-M：exec_binance_rest.py（PAPI /papi/v1/cm/order）
     - UM：直接使用 binance_rest.r_signed（PAPI /papi/v1/um/order）
 """
@@ -31,6 +32,7 @@ from arbitrage.config import (
     PAPI_BASE,
     PAPI_KEY,
     PAPI_SECRET,
+    MARGIN_SIDE_EFFECT_TYPE,
 )
 
 OrderBookSide = List[Tuple[float, float]]
@@ -77,6 +79,82 @@ class BaseLeg:
     def is_perp(self) -> bool: return False
     def contract_size(self) -> Optional[float]: return None
 
+
+# ---------------------------------------------------------------------
+# SPOT（Portfolio Margin 下的 Cross Margin 现货/杠杆）
+# ---------------------------------------------------------------------
+class SpotLeg(BaseLeg):
+    def __init__(self, symbol: str):
+        self.symbol = symbol.upper()
+
+    def get_books(self, limit=5):
+        ob = _get_ob(self.symbol)
+        if not ob:
+            bids, asks = rest_adp.get_depth("spot", self.symbol, limit=max(20, limit))
+            return bids[:limit], asks[:limit]
+        return ob.bids[:limit], ob.asks[:limit]
+
+    def ref_price(self) -> float:
+        mp = _get_mark(self.symbol)
+        if mp:
+            return float(mp.mark)
+        ob = _get_ob(self.symbol)
+        if ob and ob.bids and ob.asks:
+            return float(_mid_from_ob(ob))
+        bids, asks = rest_adp.get_depth("spot", self.symbol, limit=5)
+        return float((bids[0][0] + asks[0][0]) / 2.0)
+
+    def qty_from_usd(self, V_usd: float) -> float:
+        return V_usd / max(1e-12, self.ref_price())
+
+    def place_market(self, side: str, qty: float, reduce_only: bool=False):
+        params = {
+            "symbol": self.symbol,
+            "side": "BUY" if side == "BUY" else "SELL",
+            "type": "MARKET",
+            "quantity": f"{float(qty):.8f}",
+            "newOrderRespType": "FULL",
+        }
+        if MARGIN_SIDE_EFFECT_TYPE:
+            params["sideEffectType"] = MARGIN_SIDE_EFFECT_TYPE
+        logging.info("Placing margin market order: %s", params)
+        return r_signed(PAPI_BASE, "/papi/v1/margin/order", "POST", params, PAPI_KEY, PAPI_SECRET)
+
+    def place_limit_maker(self, side: str, qty: float, px: float):
+        params = {
+            "symbol": self.symbol,
+            "side": "BUY" if side == "BUY" else "SELL",
+            "type": "LIMIT_MAKER",
+            "quantity": f"{float(qty):.8f}",
+            "price": f"{float(px):.8f}",
+            "newOrderRespType": "FULL",
+        }
+        if MARGIN_SIDE_EFFECT_TYPE:
+            params["sideEffectType"] = MARGIN_SIDE_EFFECT_TYPE
+        logging.info("Placing margin limit maker order: %s", params)
+        return r_signed(PAPI_BASE, "/papi/v1/margin/order", "POST", params, PAPI_KEY, PAPI_SECRET)
+
+    def get_order_status(self, order_id: int):
+        r = r_signed(
+            PAPI_BASE,
+            "/papi/v1/margin/order",
+            "GET",
+            {"symbol": self.symbol, "orderId": int(order_id)},
+            PAPI_KEY,
+            PAPI_SECRET,
+        )
+        return r.get("status", ""), float(r.get("executedQty", 0.0) or 0.0)
+
+    def cancel(self, order_id: int):
+        return r_signed(
+            PAPI_BASE,
+            "/papi/v1/margin/order",
+            "DELETE",
+            {"symbol": self.symbol, "orderId": int(order_id)},
+            PAPI_KEY,
+            PAPI_SECRET,
+        )
+
 # ---------------------------------------------------------------------
 # COIN-M
 # ---------------------------------------------------------------------
@@ -103,11 +181,14 @@ class CoinMLeg(BaseLeg):
             return float(mp.mark)
         # 兜底
         mark = rest_adp.get_mark("coinm", self.symbol)
+        if mark is None:
+            raise RuntimeError(f"mark not available for coinm:{self.symbol}")
         return float(mark)
 
     def qty_from_usd(self, V_usd: float) -> float:
         self._ensure_meta()
-        return V_usd / max(1e-12, self._C)
+        C = float(self._C or 0.0)
+        return V_usd / max(1e-12, C)
 
     def place_market(self, side: str, qty: float, reduce_only: bool=False):
         n = int(qty)
@@ -146,6 +227,8 @@ class UMLeg(BaseLeg):
         if mp:
             return float(mp.mark)
         mark = rest_adp.get_mark("usdtm", self.symbol)  # usdtm/usdcm 同 FAPI
+        if mark is None:
+            raise RuntimeError(f"mark not available for usdtm:{self.symbol}")
         return float(mark)
 
     def qty_from_usd(self, V_usd: float) -> float:
@@ -191,6 +274,8 @@ class UMLeg(BaseLeg):
 # ---------------------------------------------------------------------
 def make_leg(kind: str, symbol: str) -> BaseLeg:
     k = (kind or "").lower()
+    if k == "spot":
+        return SpotLeg(symbol)
     if k == "coinm": return CoinMLeg(symbol)
     if k in ("usdtm","usdcm"): return UMLeg(symbol)
     raise ValueError(f"unsupported leg kind for PAPI-only build: {kind}")

@@ -165,3 +165,146 @@ requests.exceptions.HTTPError: 401 Client Error: Unauthorized for url: https://a
 [2025-12-26 10:57:11] INFO logic.py:321 - 上一分钟成交额：quote=1026412.34 USD hedge=934804.07 USD
 [2025-12-26 10:57:11] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
 [2025-12-26 10:57:11] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates
+[2025-12-26 15:06:38] INFO main.py:180 - runner starting
+[2025-12-26 15:06:38] INFO main.py:124 - environment parms: MAX_SLIPPAGE_BPS_SPOT: 5.0
+[2025-12-26 15:06:38] INFO main.py:128 - booting data service with regs=[('spot', 'BTCUSDT'), ('usdtm', 'BTCUSDT')]
+[2025-12-26 15:06:40] INFO main.py:140 - starting main loop
+[2025-12-26 15:06:40] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 15:06:43] INFO logic.py:296 - Ref prices: quote=89162.7000 hedge=89198.1750 | spread=-3.98bps
+[2025-12-26 15:06:43] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 15:06:45] INFO logic.py:321 - 上一分钟成交额：quote=1452920.62 USD hedge=209120.14 USD
+[2025-12-26 15:06:45] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
+[2025-12-26 15:06:45] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates
+[2025-12-26 15:06:47] INFO main.py:64 - subscribing to execution fills
+[2025-12-26 15:06:47] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 15:06:51] INFO logic.py:296 - Ref prices: quote=89152.4111 hedge=89193.3550 | spread=-4.59bps
+[2025-12-26 15:06:51] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 15:06:53] INFO logic.py:321 - 上一分钟成交额：quote=3428939.23 USD hedge=210709.56 USD
+[2025-12-26 15:06:53] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
+[2025-12-26 15:06:53] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates
+[2025-12-26 15:06:53] INFO binance_rest.py:113 - r_signed GET: https://papi.binance.com/papi/v1/balance?recvWindow=5000&timestamp=1766732813129&signature=8312a721904646713e11e8f0735ba0f72cc8284e2449dcdd415a15f10946110c{'X-MBX-APIKEY': 'oEEYYNGaWNTgaPe1qpzlNXHmdeY0xMJeh65JpfIW90GP7HQl6VmXLqe8jtE3qkgF'}10
+[2025-12-26 15:06:53] INFO binance_rest.py:113 - r_signed GET: https://papi.binance.com/papi/v1/account?recvWindow=5000&timestamp=1766732813296&signature=f999b2c2513ee4f5c920934ce31043203d3b97dd609a0b36a1e33b0f69eb09e2{'X-MBX-APIKEY': 'oEEYYNGaWNTgaPe1qpzlNXHmdeY0xMJeh65JpfIW90GP7HQl6VmXLqe8jtE3qkgF'}10
+[2025-12-26 15:06:53] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 15:06:56] INFO logic.py:296 - Ref prices: quote=89151.7640 hedge=89193.3550 | spread=-4.66bps
+[2025-12-26 15:06:56] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 15:06:56] INFO logic.py:321 - 上一分钟成交额：quote=3428939.23 USD hedge=210709.56 USD
+[2025-12-26 15:06:56] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
+[2025-12-26 15:06:56] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates
+[2025-12-26 15:06:56] INFO main.py:87 - [ACCT] bal={'USDT': {'asset': 'USDT', 'totalWalletBalance': '2.04707007', 'crossMarginAsset': '2.04765744', 'crossMarginBorrowed': '0.0', 'crossMarginFree': '2.04765744', 'crossMarginInterest': '0.0', 'crossMarginLocked': '0.0', 'umWalletBalance': '-0.00058737', 'umUnrealizedPNL': '0.18483546', 'cmWalletBalance': '0.0', 'cmUnrealizedPNL': '0.0', 'updateTime': 1766707200430, 'negativeBalance': '0.0'}}
+[2025-12-26 15:06:56] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 15:06:59] INFO logic.py:296 - Ref prices: quote=89150.7179 hedge=89193.3550 | spread=-4.78bps
+[2025-12-26 15:06:59] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 15:07:01] INFO logic.py:321 - 上一分钟成交额：quote=3595734.66 USD hedge=106.14 USD
+[2025-12-26 15:07:01] INFO logic.py:330 - ❌ 流动性不足。V_USD=1000.00超限。Q上限:35957.35 (1% of 3595734.66), H上限:1.06 (1% of 106.14)
+[2025-12-26 15:07:01] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 15:07:05] INFO logic.py:296 - Ref prices: quote=89149.7190 hedge=89193.3550 | spread=-4.89bps
+[2025-12-26 15:07:05] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 15:07:07] INFO logic.py:321 - 上一分钟成交额：quote=284559.50 USD hedge=3274.29 USD
+[2025-12-26 15:07:07] INFO logic.py:330 - ❌ 流动性不足。V_USD=1000.00超限。Q上限:2845.59 (1% of 284559.50), H上限:32.74 (1% of 3274.29)
+[2025-12-26 15:07:07] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 15:07:11] INFO logic.py:296 - Ref prices: quote=89147.4561 hedge=89188.3750 | spread=-4.59bps
+[2025-12-26 15:07:11] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 15:07:12] INFO logic.py:321 - 上一分钟成交额：quote=383066.38 USD hedge=888695.97 USD
+[2025-12-26 15:07:12] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
+[2025-12-26 15:07:12] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates
+[2025-12-26 15:07:12] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 15:07:15] INFO logic.py:296 - Ref prices: quote=89141.9313 hedge=89188.3750 | spread=-5.21bps
+[2025-12-26 15:07:15] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 15:07:15] INFO logic.py:321 - 上一分钟成交额：quote=383066.38 USD hedge=888695.97 USD
+[2025-12-26 15:07:15] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
+[2025-12-26 15:07:15] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates
+[2025-12-26 15:07:16] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 15:07:19] INFO logic.py:296 - Ref prices: quote=89139.6374 hedge=89188.3750 | spread=-5.46bps
+[2025-12-26 15:07:19] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 15:07:21] INFO logic.py:321 - 上一分钟成交额：quote=895438.66 USD hedge=1122489.90 USD
+[2025-12-26 15:07:21] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
+[2025-12-26 15:07:21] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates
+[2025-12-26 15:07:22] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 15:07:25] INFO logic.py:296 - Ref prices: quote=89139.0268 hedge=89188.3750 | spread=-5.53bps
+[2025-12-26 15:07:25] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 15:07:27] INFO logic.py:321 - 上一分钟成交额：quote=925389.18 USD hedge=1127018.89 USD
+[2025-12-26 15:07:27] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
+[2025-12-26 15:07:27] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates
+[2025-12-26 15:07:27] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 15:07:30] INFO logic.py:296 - Ref prices: quote=89138.4387 hedge=89188.3750 | spread=-5.60bps
+[2025-12-26 15:07:30] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 15:07:32] INFO logic.py:321 - 上一分钟成交额：quote=1041625.51 USD hedge=1128600.19 USD
+[2025-12-26 15:07:32] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
+[2025-12-26 15:07:32] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates
+[2025-12-26 15:11:09] INFO main.py:124 - environment parms: MAX_SLIPPAGE_BPS_SPOT: 5.0
+[2025-12-26 15:11:09] INFO main.py:128 - booting data service with regs=[('spot', 'BTCUSDT'), ('usdtm', 'BTCUSDT')]
+[2025-12-26 15:11:11] INFO main.py:140 - starting main loop
+[2025-12-26 15:11:11] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 15:11:14] INFO logic.py:296 - Ref prices: quote=89145.7000 hedge=89189.8950 | spread=-4.96bps
+[2025-12-26 15:11:14] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 15:11:16] INFO logic.py:321 - 上一分钟成交额：quote=1201916.18 USD hedge=84756.37 USD
+[2025-12-26 15:11:16] INFO logic.py:330 - ❌ 流动性不足。V_USD=1000.00超限。Q上限:12019.16 (1% of 1201916.18), H上限:847.56 (1% of 84756.37)
+[2025-12-26 15:11:18] INFO main.py:64 - subscribing to execution fills
+[2025-12-26 15:11:18] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 15:11:22] INFO logic.py:296 - Ref prices: quote=89151.3000 hedge=89189.8950 | spread=-4.33bps
+[2025-12-26 15:11:22] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 15:11:23] INFO logic.py:321 - 上一分钟成交额：quote=1388587.67 USD hedge=89803.63 USD
+[2025-12-26 15:11:23] INFO logic.py:330 - ❌ 流动性不足。V_USD=1000.00超限。Q上限:13885.88 (1% of 1388587.67), H上限:898.04 (1% of 89803.63)
+[2025-12-26 15:11:56] INFO main.py:124 - environment parms: MAX_SLIPPAGE_BPS_SPOT: 5.0
+[2025-12-26 15:11:56] INFO main.py:128 - booting data service with regs=[('spot', 'BTCUSDT'), ('usdtm', 'BTCUSDT')]
+[2025-12-26 15:11:59] INFO main.py:140 - starting main loop
+[2025-12-26 15:11:59] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 15:12:03] INFO logic.py:296 - Ref prices: quote=89168.6000 hedge=89199.9950 | spread=-3.52bps
+[2025-12-26 15:12:03] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 15:12:04] INFO logic.py:321 - 上一分钟成交额：quote=406965.35 USD hedge=9164.41 USD
+[2025-12-26 15:12:04] INFO logic.py:330 - ❌ 流动性不足。V_USD=1000.00超限。Q上限:4069.65 (1% of 406965.35), H上限:91.64 (1% of 9164.41)
+[2025-12-26 15:12:06] INFO main.py:64 - subscribing to execution fills
+[2025-12-26 15:12:06] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 15:12:12] INFO logic.py:296 - Ref prices: quote=89161.2300 hedge=89183.7250 | spread=-2.52bps
+[2025-12-26 15:12:12] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 15:12:14] INFO logic.py:321 - 上一分钟成交额：quote=1014469.68 USD hedge=245560.62 USD
+[2025-12-26 15:12:14] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
+[2025-12-26 15:12:14] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates
+[2025-12-26 15:15:17] INFO main.py:124 - environment parms: MAX_SLIPPAGE_BPS_SPOT: 5.0
+[2025-12-26 15:15:17] INFO main.py:128 - booting data service with regs=[('spot', 'BTCUSDT'), ('usdtm', 'BTCUSDT')]
+[2025-12-26 15:15:19] INFO main.py:140 - starting main loop
+[2025-12-26 15:15:19] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 15:15:22] INFO logic.py:296 - Ref prices: quote=89320.4842 hedge=89363.4350 | spread=-4.81bps
+[2025-12-26 15:15:22] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 15:15:24] INFO logic.py:321 - 上一分钟成交额：quote=12044099.23 USD hedge=776996.87 USD
+[2025-12-26 15:15:24] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
+[2025-12-26 15:15:24] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates
+[2025-12-26 15:15:26] INFO main.py:64 - subscribing to execution fills
+[2025-12-26 15:15:26] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 15:15:31] INFO logic.py:296 - Ref prices: quote=89335.4000 hedge=89365.7150 | spread=-3.39bps
+[2025-12-26 15:15:31] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 15:15:32] INFO logic.py:321 - 上一分钟成交额：quote=13743933.96 USD hedge=813234.99 USD
+[2025-12-26 15:15:32] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
+[2025-12-26 15:15:32] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates
+[2025-12-26 15:18:19] INFO main.py:124 - environment parms: MAX_SLIPPAGE_BPS_SPOT: 5.0
+[2025-12-26 15:18:19] INFO main.py:128 - booting data service with regs=[('spot', 'BTCUSDT'), ('usdtm', 'BTCUSDT')]
+[2025-12-26 15:18:21] INFO main.py:140 - starting main loop
+[2025-12-26 15:18:21] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 15:18:26] INFO logic.py:296 - Ref prices: quote=89354.6000 hedge=89399.9950 | spread=-5.08bps
+[2025-12-26 15:18:26] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 15:18:27] INFO logic.py:321 - 上一分钟成交额：quote=3000565.56 USD hedge=1694210.59 USD
+[2025-12-26 15:18:27] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
+[2025-12-26 15:18:27] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates
+[2025-12-26 15:18:29] INFO main.py:64 - subscribing to execution fills
+[2025-12-26 15:18:29] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 15:18:33] INFO logic.py:296 - Ref prices: quote=89359.2000 hedge=89399.9950 | spread=-4.56bps
+[2025-12-26 15:18:33] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 15:18:36] INFO logic.py:321 - 上一分钟成交额：quote=4728392.03 USD hedge=1713954.58 USD
+[2025-12-26 15:18:36] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
+[2025-12-26 15:18:36] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates
+[2025-12-26 15:19:08] INFO main.py:124 - environment parms: MAX_SLIPPAGE_BPS_SPOT: 5.0
+[2025-12-26 15:19:08] INFO main.py:128 - booting data service with regs=[('spot', 'BTCUSDT'), ('usdtm', 'BTCUSDT')]
+[2025-12-26 15:19:10] INFO main.py:140 - starting main loop
+[2025-12-26 15:19:10] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 15:19:14] INFO logic.py:296 - Ref prices: quote=89342.4723 hedge=89388.9750 | spread=-5.20bps
+[2025-12-26 15:19:14] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 15:19:16] INFO logic.py:321 - 上一分钟成交额：quote=2549927.60 USD hedge=106035.08 USD
+[2025-12-26 15:19:16] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
+[2025-12-26 15:19:16] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates
+[2025-12-26 15:19:17] INFO main.py:64 - subscribing to execution fills
+[2025-12-26 15:19:17] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 15:19:21] INFO logic.py:296 - Ref prices: quote=89340.5964 hedge=89388.9750 | spread=-5.41bps
+[2025-12-26 15:19:21] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 15:19:22] INFO logic.py:321 - 上一分钟成交额：quote=3404905.22 USD hedge=108071.36 USD
+[2025-12-26 15:19:22] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
+[2025-12-26 15:19:22] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates

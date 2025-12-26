@@ -15,6 +15,7 @@ from typing import Optional
 
 from arbitrage.config import (
     HEDGE_KIND, QUOTE_KIND, HEDGE_SYMBOL, QUOTE_SYMBOL,
+    ACCOUNT_LOG_INTERVAL_SEC,
 )
 
 from arbitrage.data.service import boot_and_start, DataService
@@ -23,6 +24,7 @@ from arbitrage.exchanges.user_stream import run_user_stream
 from arbitrage.data.schemas import Position
 from arbitrage.strategy.logic import try_enter_unified, try_exit_unified
 from arbitrage.strategy.pending import GlobalPendingManager
+from arbitrage.exchanges.papi_account import fetch_papi_account_snapshot, format_papi_account_snapshot, is_papi_configured
 
 # --- 全局日志配置 ---
 log_formatter = logging.Formatter('[%(asctime)s] %(levelname)s %(filename)s:%(lineno)d - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
@@ -65,6 +67,32 @@ class Runner:
             await GlobalPendingManager.on_fill(fill_data)
             logging.debug("received fill for market %s: %s", key, fill_data)
 
+    async def _account_log_loop(self):
+        """定期拉取 PAPI 资金/账户快照并写入日志（不影响主策略）。"""
+        if not is_papi_configured():
+            logging.warning("[ACCT] skip: PAPI_KEY/PAPI_SECRET not configured")
+            return
+
+        interval = float(ACCOUNT_LOG_INTERVAL_SEC or 60.0)
+        interval = max(5.0, interval)
+
+        # 稍微等数据层与日志启动稳定
+        await asyncio.sleep(2.0)
+
+        while not self._stopping:
+            try:
+                loop = asyncio.get_running_loop()
+                snap = await loop.run_in_executor(None, fetch_papi_account_snapshot)
+                line = format_papi_account_snapshot(snap)
+                logging.info("[ACCT] %s", line)
+            except Exception:
+                logging.exception("[ACCT] failed to fetch/log account snapshot")
+
+            # 允许 stop 更快生效
+            t0 = asyncio.get_running_loop().time()
+            while not self._stopping and (asyncio.get_running_loop().time() - t0) < interval:
+                await asyncio.sleep(0.5)
+
     def _load_state(self):
         if os.path.exists(self.STATE_FILE):
             try:
@@ -105,6 +133,9 @@ class Runner:
 
         # 启动成交事件监听
         asyncio.create_task(self._listen_for_fills())
+
+        # 启动账户资金定期日志
+        asyncio.create_task(self._account_log_loop())
 
         logging.info("starting main loop")
         # 主循环

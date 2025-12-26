@@ -58,31 +58,52 @@ def _infer_futures_market_from_symbol(symbol: Optional[str]) -> str:
 
 
 def _parse_papi(msg: dict):
-    # Portfolio Margin UDS：主要关心 futures ORDER_TRADE_UPDATE
+    # Portfolio Margin UDS：
+    # - futures: ORDER_TRADE_UPDATE
+    # - margin:  executionReport
     d = msg.get("data") or msg
 
-    if d.get("e") != "ORDER_TRADE_UPDATE":
+    et = d.get("e")
+    if et == "ORDER_TRADE_UPDATE":
+        o = d.get("o", {})
+        symbol = o.get("s")
+        market = _infer_futures_market_from_symbol(symbol)
+        payload = dict(
+            market=market,
+            event="execution",
+            symbol=symbol,
+            orderId=o.get("i"),
+            side=o.get("S"),
+            status=o.get("X"),
+            lastPx=float(o.get("L", 0) or 0.0),
+            lastQty=float(o.get("l", 0) or 0.0),
+            execTs=float(d.get("E", 0) / 1000),
+            cumQty=float(o.get("z", 0) or 0.0),
+            cumQuote=float(o.get("Z", 0) or 0.0),
+            reduceOnly=bool(o.get("R", False)),
+        )
+        _publish_exec(market, payload)
         return
 
-    o = d.get("o", {})
-    symbol = o.get("s")
-    market = _infer_futures_market_from_symbol(symbol)
-
-    payload = dict(
-        market=market,
-        event="execution",
-        symbol=symbol,
-        orderId=o.get("i"),
-        side=o.get("S"),
-        status=o.get("X"),
-        lastPx=float(o.get("L", 0) or 0.0),
-        lastQty=float(o.get("l", 0) or 0.0),
-        execTs=float(d.get("E", 0) / 1000),
-        cumQty=float(o.get("z", 0) or 0.0),
-        cumQuote=float(o.get("Z", 0) or 0.0),
-        reduceOnly=bool(o.get("R", False)),
-    )
-    _publish_exec(market, payload)
+    if et == "executionReport":
+        # Margin order update
+        symbol = d.get("s")
+        market = "spot"
+        payload = dict(
+            market=market,
+            event="execution",
+            symbol=symbol,
+            orderId=d.get("i"),
+            side=d.get("S"),
+            status=d.get("X"),
+            lastPx=float(d.get("L", 0) or 0.0),
+            lastQty=float(d.get("l", 0) or 0.0),
+            execTs=float(d.get("E", 0) / 1000),
+            cumQty=float(d.get("z", 0) or 0.0),
+            cumQuote=float(d.get("Z", 0) or 0.0),
+        )
+        _publish_exec(market, payload)
+        return
 
 # -------------------------------------------------------------------
 # WS 主循环
