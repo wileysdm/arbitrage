@@ -9,7 +9,7 @@ import os, ssl, json, time, asyncio
 from dataclasses import dataclass
 from typing import Optional
 
-from websockets import client as websockets
+import websockets
 
 # 兜底 schemas / bus
 try:

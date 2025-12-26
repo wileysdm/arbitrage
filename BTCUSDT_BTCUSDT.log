@@ -109,3 +109,59 @@ future: <Task finished name='Task-2' coro=<pump_from_bus() done, defined at C:\U
 Traceback (most recent call last):
   File "C:\Users\lenovo\arbitrage\arbitrage\data\cache.py", line 60, in pump_from_bus
 TypeError: object async_generator can't be used in 'await' expression
+[2025-12-26 10:56:40] INFO main.py:96 - environment parms: MAX_SLIPPAGE_BPS_SPOT: 5.0
+[2025-12-26 10:56:40] INFO main.py:100 - booting data service with regs=[('spot', 'BTCUSDT'), ('usdtm', 'BTCUSDT')]
+[2025-12-26 10:56:41] INFO main.py:112 - starting main loop
+[2025-12-26 10:56:41] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 10:56:44] INFO logic.py:296 - Ref prices: quote=89196.9000 hedge=89237.2850 | spread=-4.53bps
+[2025-12-26 10:56:44] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 10:56:46] INFO logic.py:321 - 上一分钟成交额：quote=7170406.43 USD hedge=2372261.49 USD
+[2025-12-26 10:56:46] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
+[2025-12-26 10:56:46] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates
+[2025-12-26 10:56:46] INFO main.py:62 - subscribing to execution fills
+[2025-12-26 10:56:49] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 10:56:53] INFO logic.py:296 - Ref prices: quote=89197.0604 hedge=89237.2950 | spread=-4.51bps
+[2025-12-26 10:56:53] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 10:56:54] INFO logic.py:321 - 上一分钟成交额：quote=7598194.18 USD hedge=2883286.67 USD
+[2025-12-26 10:56:54] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
+[2025-12-26 10:56:54] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates
+[2025-12-26 10:56:54] ERROR base_events.py:1879 - Task exception was never retrieved
+future: <Task finished name='Task-10' coro=<run_all_user_streams() done, defined at c:\Users\lenovo\arbitrage\arbitrage\exchanges\user_stream.py:161> exception=HTTPError('401 Client Error: Unauthorized for url: https://api.binance.com/api/v3/userDataStream')>
+Traceback (most recent call last):
+  File "c:\Users\lenovo\arbitrage\arbitrage\exchanges\user_stream.py", line 167, in run_all_user_streams
+    await asyncio.gather(*tasks)
+  File "c:\Users\lenovo\arbitrage\arbitrage\exchanges\user_stream.py", line 144, in run_spot_user_stream
+    lk = await _create_listen_key(SPOT_BASE, "/api/v3/userDataStream", SPOT_KEY, SPOT_SECRET)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\lenovo\arbitrage\arbitrage\exchanges\user_stream.py", line 46, in _create_listen_key
+    j = r_post(base, path, {}, key=key)
+  File "c:\Users\lenovo\arbitrage\arbitrage\exchanges\binance_rest.py", line 70, in r_post
+    r.raise_for_status()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "c:\Users\lenovo\arbitrage\.venv\Lib\site-packages\requests\models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 401 Client Error: Unauthorized for url: https://api.binance.com/api/v3/userDataStream
+[2025-12-26 10:56:54] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 10:56:57] INFO logic.py:296 - Ref prices: quote=89195.6833 hedge=89239.3550 | spread=-4.89bps
+[2025-12-26 10:56:57] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 10:56:57] INFO logic.py:321 - 上一分钟成交额：quote=7598194.18 USD hedge=2883286.67 USD
+[2025-12-26 10:56:57] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
+[2025-12-26 10:56:57] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates
+[2025-12-26 10:56:58] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 10:57:01] INFO logic.py:296 - Ref prices: quote=89192.3667 hedge=89223.9150 | spread=-3.54bps
+[2025-12-26 10:57:01] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 10:57:02] INFO logic.py:321 - 上一分钟成交额：quote=138503.38 USD hedge=504382.11 USD
+[2025-12-26 10:57:02] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
+[2025-12-26 10:57:02] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates
+[2025-12-26 10:57:03] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 10:57:06] INFO logic.py:296 - Ref prices: quote=89175.4700 hedge=89214.7850 | spread=-4.41bps
+[2025-12-26 10:57:06] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 10:57:06] INFO logic.py:321 - 上一分钟成交额：quote=138503.38 USD hedge=504382.11 USD
+[2025-12-26 10:57:06] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
+[2025-12-26 10:57:06] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates
+[2025-12-26 10:57:06] INFO logic.py:286 - try_enter_unified called
+[2025-12-26 10:57:09] INFO logic.py:296 - Ref prices: quote=89188.3000 hedge=89227.6650 | spread=-4.41bps
+[2025-12-26 10:57:09] INFO logic.py:305 - quote.symbol=BTCUSDT hedge.symbol=BTCUSDT
+[2025-12-26 10:57:11] INFO logic.py:321 - 上一分钟成交额：quote=1026412.34 USD hedge=934804.07 USD
+[2025-12-26 10:57:11] INFO logic.py:336 - ✅ 流动性检查通过。投入资金 V_USD=1000.00 在两腿 1% 范围内。
+[2025-12-26 10:57:11] INFO logic.py:344 - Collected 0 POS candidates, 0 NEG candidates

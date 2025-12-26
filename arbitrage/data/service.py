@@ -75,9 +75,9 @@ class DataService:
             self._tasks.append(asyncio.create_task(self._persist_loop()))
 
     async def _persist_loop(self):
-        ob_sub = await self.bus.subscribe(Topic.ORDERBOOK, None)
-        mk_sub = await self.bus.subscribe(Topic.MARK, None)
-        fr_sub = await self.bus.subscribe(Topic.FUNDING, None)
+        ob_sub = self.bus.subscribe(Topic.ORDERBOOK, None)
+        mk_sub = self.bus.subscribe(Topic.MARK, None)
+        fr_sub = self.bus.subscribe(Topic.FUNDING, None)
 
         async def _loop_ob():
             async for sym, ob in ob_sub:
@@ -142,11 +142,11 @@ class DataClient:
             return loop.run_until_complete(self.aget_meta(symbol))
 
     # 订阅异步流
-    async def subscribe_orderbook(self, symbol: str):
-        return await self.svc.bus.subscribe(Topic.ORDERBOOK, symbol.upper())
+    def subscribe_orderbook(self, symbol: str):
+        return self.svc.bus.subscribe(Topic.ORDERBOOK, symbol.upper())
 
-    async def subscribe_mark(self, symbol: str):
-        return await self.svc.bus.subscribe(Topic.MARK, symbol.upper())
+    def subscribe_mark(self, symbol: str):
+        return self.svc.bus.subscribe(Topic.MARK, symbol.upper())
 
 # ---- 便捷启动 ----
 async def boot_and_start(regs: list[tuple[str, str]], use_ws: bool = True, persist: bool = False):

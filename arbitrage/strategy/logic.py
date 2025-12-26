@@ -402,7 +402,17 @@ async def try_enter_unified():
         o_h = o_q = {}  # hybrid 内已下单，这里占位记录
 
     else:  # taker
-        if side == "POS":
+        if DRY_RUN:
+            logging.info(
+                "[DRY] taker mode would trade: side=%s q=%s qty=%.6f h=%s qty=%.6f | skip placing orders",
+                side,
+                getattr(quote, "symbol", "?"),
+                q_qty,
+                getattr(hedge, "symbol", "?"),
+                h_qty,
+            )
+            o_h = o_q = {}
+        elif side == "POS":
             o_h = hedge.place_market("BUY",  h_qty)
             o_q = quote.place_market("SELL", q_qty)
         else:
@@ -478,6 +488,17 @@ def try_exit_unified(position: Position) -> Tuple[bool, str]:
         q_qty = float(position.N or 0)
     else:
         q_qty = quote.qty_from_usd(V_USD)
+
+    if DRY_RUN:
+        logging.info(
+            "[DRY] would close position side=%s (hedge=%s qty=%s, quote=%s qty=%s); skip placing orders",
+            position.side,
+            getattr(hedge, "symbol", "?"),
+            h_qty,
+            getattr(quote, "symbol", "?"),
+            q_qty,
+        )
+        return (True, reason)
 
     # 按仓位方向发送对冲单（perp 使用 reduceOnly 防止反向开仓）
     if position.side == "POS":

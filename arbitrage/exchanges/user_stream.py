@@ -1,48 +1,34 @@
-# -*- coding: utf-8 -*-
-# arbitrage/exchanges/user_stream.py
+"""Binance Portfolio Margin (PAPI) User Data Stream.
+
+统一账户只需要一条 UDS：
+- REST: POST/PUT /papi/v1/listenKey (base=https://papi.binance.com)
+- WS:   wss://fstream.binance.com/pm/ws/<listenKey>
+
+消费 WS 事件并将成交事件发布到 Bus 的 Topic.EXEC_FILLS（key=um/cm）。
 """
-Binance User Data Stream（Spot / COIN-M / USDⓈ-M）
-- 负责创建 listenKey、维持 keepalive、消费 WS 事件
-- 将成交/账户事件发布到 data.bus 的 Topic.EXEC_FILLS（key=市场类型）
-事件负载（示例）：
-{
-  "market": "um" | "cm" | "spot",
-  "event": "execution",
-  "symbol": "BTCUSDT",
-  "orderId": 123456,
-  "side": "BUY",
-  "status": "FILLED",
-  "lastPx":  62000.5,
-  "lastQty": 0.001,
-  "execTs":  1719999999.123,
-  "cumQty":  0.005,
-  "cumQuote": 310.0
-}
-"""
+
 from __future__ import annotations
-import os, ssl, json, time, asyncio
+
+import asyncio
+import json
+import ssl
+
 import websockets
 from typing import Optional, Dict, Any
 
-from arbitrage.exchanges.binance_rest import r_post, r_put, r_get  # 使用你已有 HTTP 底座（带代理/重试）
-from arbitrage.data.bus import Bus, Topic
+from arbitrage.exchanges.binance_rest import r_post, r_put
+from arbitrage.data.bus import Topic
 from arbitrage.data.service import DataService
-
-# to-do 挪到 config.py
-from arbitrage.config import (
-    SPOT_BASE, DAPI_BASE, FAPI_BASE, SPOT_KEY, SPOT_SECRET, DAPI_KEY, DAPI_SECRET, 
-    UM_KEY, UM_SECRET, WS_CM, WS_UM, WS_SPOT
-)
+from arbitrage.config import PAPI_BASE, PAPI_KEY, WS_PM
 
 KEEPALIVE_SEC = 30 * 60
 
-BUS = DataService.global_service().bus  # 直接用全局数据总线
+BUS = DataService.global_service().bus
 
 # -------------------------------------------------------------------
 # listenKey / keepalive
 # -------------------------------------------------------------------
-async def _create_listen_key(base: str, path: str, key: str, secret: str) -> str:
-    # 这些接口不需要签名，但你 binance_rest.r_post 会自动带 key header
+async def _create_listen_key(base: str, path: str, key: str) -> str:
     j = r_post(base, path, {}, key=key)
     return j["listenKey"]
 
@@ -60,33 +46,35 @@ async def _keepalive_loop(base: str, path: str, key: str, listen_key: str):
 def _publish_exec(market: str, payload: Dict[str, Any]):
     BUS.publish(Topic.EXEC_FILLS, market, payload)
 
-def _parse_spot(msg: dict):
-    # Spot: executionReport
-    d = msg
-    if d.get("e") != "executionReport":
-        return
-    payload = dict(
-        market="spot", event="execution",
-        symbol=d.get("s"), orderId=d.get("i"),
-        side=d.get("S"), status=d.get("X"),
-        lastPx=float(d.get("L", 0) or 0.0),
-        lastQty=float(d.get("l", 0) or 0.0),
-        execTs=float(d.get("E", 0) / 1000),
-        cumQty=float(d.get("z", 0) or 0.0),
-        cumQuote=float(d.get("Z", 0) or 0.0),
-    )
-    _publish_exec("spot", payload)
 
-def _parse_um(msg: dict):
-    # UM: ORDER_TRADE_UPDATE
+def _infer_futures_market_from_symbol(symbol: Optional[str]) -> str:
+    if not symbol:
+        return "um"
+    s = symbol.upper()
+    # UM 常见：BTCUSDT/BTCUSDC；CM 常见：BTCUSD_PERP/BTCUSD_YYMMDD
+    if s.endswith("USDT") or s.endswith("USDC"):
+        return "um"
+    return "cm"
+
+
+def _parse_papi(msg: dict):
+    # Portfolio Margin UDS：主要关心 futures ORDER_TRADE_UPDATE
     d = msg.get("data") or msg
+
     if d.get("e") != "ORDER_TRADE_UPDATE":
         return
+
     o = d.get("o", {})
+    symbol = o.get("s")
+    market = _infer_futures_market_from_symbol(symbol)
+
     payload = dict(
-        market="um", event="execution",
-        symbol=o.get("s"), orderId=o.get("i"),
-        side=o.get("S"), status=o.get("X"),
+        market=market,
+        event="execution",
+        symbol=symbol,
+        orderId=o.get("i"),
+        side=o.get("S"),
+        status=o.get("X"),
         lastPx=float(o.get("L", 0) or 0.0),
         lastQty=float(o.get("l", 0) or 0.0),
         execTs=float(d.get("E", 0) / 1000),
@@ -94,26 +82,7 @@ def _parse_um(msg: dict):
         cumQuote=float(o.get("Z", 0) or 0.0),
         reduceOnly=bool(o.get("R", False)),
     )
-    _publish_exec("um", payload)
-
-def _parse_cm(msg: dict):
-    # CM: ORDER_TRADE_UPDATE
-    d = msg.get("data") or msg
-    if d.get("e") != "ORDER_TRADE_UPDATE":
-        return
-    o = d.get("o", {})
-    payload = dict(
-        market="cm", event="execution",
-        symbol=o.get("s"), orderId=o.get("i"),
-        side=o.get("S"), status=o.get("X"),
-        lastPx=float(o.get("L", 0) or 0.0),
-        lastQty=float(o.get("l", 0) or 0.0),
-        execTs=float(d.get("E", 0) / 1000),
-        cumQty=float(o.get("z", 0) or 0.0),
-        cumQuote=float(o.get("Z", 0) or 0.0),
-        reduceOnly=bool(o.get("R", False)),
-    )
-    _publish_exec("cm", payload)
+    _publish_exec(market, payload)
 
 # -------------------------------------------------------------------
 # WS 主循环
@@ -140,28 +109,8 @@ async def _run_ws(url: str, on_msg, name: str):
 # -------------------------------------------------------------------
 # 对外启动器
 # -------------------------------------------------------------------
-async def run_spot_user_stream():
-    lk = await _create_listen_key(SPOT_BASE, "/api/v3/userDataStream", SPOT_KEY, SPOT_SECRET)
-    url = f"{WS_SPOT}/ws/{lk}"
-    asyncio.create_task(_keepalive_loop(SPOT_BASE, "/api/v3/userDataStream", SPOT_KEY, lk))
-    await _run_ws(url, _parse_spot, "spot-uds")
-
-async def run_um_user_stream():
-    lk = await _create_listen_key(FAPI_BASE, "/fapi/v1/listenKey", UM_KEY, UM_SECRET)
-    url = f"{WS_UM}/ws/{lk}"
-    asyncio.create_task(_keepalive_loop(FAPI_BASE, "/fapi/v1/listenKey", UM_KEY, lk))
-    await _run_ws(url, _parse_um, "um-uds")
-
-async def run_cm_user_stream():
-    lk = await _create_listen_key(DAPI_BASE, "/dapi/v1/listenKey", DAPI_KEY, DAPI_SECRET)
-    url = f"{WS_CM}/ws/{lk}"
-    asyncio.create_task(_keepalive_loop(DAPI_BASE, "/dapi/v1/listenKey", DAPI_KEY, lk))
-    await _run_ws(url, _parse_cm, "cm-uds")
-
-async def run_all_user_streams(enable_spot=True, enable_um=True, enable_cm=True):
-    tasks = []
-    if enable_spot: tasks.append(asyncio.create_task(run_spot_user_stream()))
-    if enable_um:   tasks.append(asyncio.create_task(run_um_user_stream()))
-    if enable_cm:   tasks.append(asyncio.create_task(run_cm_user_stream()))
-    if tasks:
-        await asyncio.gather(*tasks)
+async def run_user_stream():
+    lk = await _create_listen_key(PAPI_BASE, "/papi/v1/listenKey", PAPI_KEY)
+    url = f"{WS_PM}/ws/{lk}"
+    asyncio.create_task(_keepalive_loop(PAPI_BASE, "/papi/v1/listenKey", PAPI_KEY, lk))
+    await _run_ws(url, _parse_papi, "papi-uds")

@@ -57,10 +57,10 @@ async def pump_from_bus(bus: Bus, cache: Cache):
     统一监听 bus 上的几个 Topic，写入 cache。
     - 使用通配订阅（key=None），收到 (key, value)
     """
-    ob_sub = await bus.subscribe(Topic.ORDERBOOK, None)
-    mk_sub = await bus.subscribe(Topic.MARK, None)
-    fr_sub = await bus.subscribe(Topic.FUNDING, None)
-    mt_sub = await bus.subscribe(Topic.META, None)
+    ob_sub = bus.subscribe(Topic.ORDERBOOK, None)
+    mk_sub = bus.subscribe(Topic.MARK, None)
+    fr_sub = bus.subscribe(Topic.FUNDING, None)
+    mt_sub = bus.subscribe(Topic.META, None)
 
     async def _loop_ob():
         async for key, ob in ob_sub:

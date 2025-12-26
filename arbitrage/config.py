@@ -10,44 +10,43 @@ _dotenv_path = find_dotenv(usecwd=True)
 if _dotenv_path:
     load_dotenv(_dotenv_path)
 
-# —— 交易端点（保留你原有命名）——
+# —— 公共行情端点（REST/WS；不需要签名）——
+# 说明：统一账户仅影响“私有域”（下单/资金/UDS）；公共行情仍按现货/合约各自域名获取。
 SPOT_BASE = os.environ.get("SPOT_BASE", "https://api.binance.com")
-DAPI_BASE = os.environ.get("DAPI_BASE", "https://dapi.binance.com")
 FAPI_BASE = os.environ.get("FAPI_BASE", "https://fapi.binance.com")
+DAPI_BASE = os.environ.get("DAPI_BASE", "https://dapi.binance.com")
 
 WS_SPOT = os.environ.get("WS_SPOT", "wss://stream.binance.com:9443")
-WS_CM   = os.environ.get("WS_CM", "wss://dstream.binance.com")
-WS_UM   = os.environ.get("WS_UM", "wss://fstream.binance.com")
+WS_UM = os.environ.get("WS_UM", "wss://fstream.binance.com")
+WS_CM = os.environ.get("WS_CM", "wss://dstream.binance.com")
 
-# —— API Keys ——（默认回落：UM/DAPI 沿用 SPOT 的 KEY/SECRET，便于本地调试）
-SPOT_KEY    = os.environ.get("SPOT_KEY"   , "")
-SPOT_SECRET = os.environ.get("SPOT_SECRET", "")
-DAPI_KEY    = os.environ.get("DAPI_KEY"   , SPOT_KEY)
-DAPI_SECRET = os.environ.get("DAPI_SECRET", SPOT_SECRET)
-UM_KEY      = os.environ.get("UM_KEY"     , SPOT_KEY)
-UM_SECRET   = os.environ.get("UM_SECRET"  , SPOT_SECRET)
+# —— 统一账户 / Portfolio Margin (PAPI) ——
+# 文档：Base https://papi.binance.com；UDS WS：wss://fstream.binance.com/pm
+PAPI_BASE = os.environ.get("PAPI_BASE", "https://papi.binance.com")
+WS_PM = os.environ.get("WS_PM", "wss://fstream.binance.com/pm")
+
+# —— API Keys ——
+PAPI_KEY    = os.environ.get("PAPI_KEY"   , "")
+PAPI_SECRET = os.environ.get("PAPI_SECRET", "")
 
 # —— 标的与腿类型 ——（并列）
 PAIR = os.environ.get("PAIR", "BTC")
 SPOT_SYMBOL   = os.environ.get("SPOT_SYMBOL",   f"{PAIR}USDT")
 COINM_SYMBOL  = os.environ.get("COINM_SYMBOL",  f"{PAIR}USD_PERP")
 
-# 腿类型：'spot' | 'coinm' | 'usdtm' | 'usdcm'
-HEDGE_KIND = os.environ.get("HEDGE_KIND", "spot").lower()
+# 腿类型：'coinm' | 'usdtm' | 'usdcm'
+# 统一账户版本不再支持 spot 腿（避免误走非 PAPI 下单/UDS 体系）。
+HEDGE_KIND = os.environ.get("HEDGE_KIND", "coinm").lower()
 QUOTE_KIND = os.environ.get("QUOTE_KIND", "usdtm").lower()
 
 HEDGE_SYMBOL = os.environ.get(
     "HEDGE_SYMBOL",
-    # 现货对：直接用 SPOT_SYMBOL
-    SPOT_SYMBOL if HEDGE_KIND == "spot"
-    else (
-        # 币本位：用 COINM_SYMBOL
-        COINM_SYMBOL if HEDGE_KIND == "coinm"
-        # USDC 本位：PAIRUSDC
-        else f"{PAIR}USDC" if HEDGE_KIND in "usdcm"
-        # 其它线性合约默认按 USDT 本位处理：PAIRUSDT
-        else f"{PAIR}USDT"
-    )
+    # 币本位：用 COINM_SYMBOL
+    COINM_SYMBOL if HEDGE_KIND == "coinm"
+    # USDC 本位：PAIRUSDC
+    else f"{PAIR}USDC" if HEDGE_KIND in "usdcm"
+    # 其它线性合约默认按 USDT 本位处理：PAIRUSDT
+    else f"{PAIR}USDT"
 )
 
 QUOTE_SYMBOL = os.environ.get(
@@ -76,7 +75,7 @@ EXECUTION_MODE           = os.environ.get("EXECUTION_MODE", "taker")    # taker/
 
 # Hybrid 相关参数
 HYBRID_MAKER_LEG      = os.environ.get("HYBRID_MAKER_LEG", "quote").lower()  # "quote" 或 "hedge"
-HYBRID_WAIT_SEC       = float(os.environ.get("HYBRID_WAIT_SEC", "1.5"))      # 等待 maker 成交通知窗口
+HYBRID_WAIT_SEC       = float(os.environ.get("HYBRID_WAIT_SEC", "0.5"))      # 等待 maker 成交通知窗口
 HYBRID_MIN_FILL_RATIO = float(os.environ.get("HYBRID_MIN_FILL_RATIO", "0.2"))# 部分成交比例阈值
 PAIR_POLL_INTERVAL    = float(os.environ.get("PAIR_POLL_INTERVAL", "0.15"))  # 轮询间隔
 DRY_RUN               = os.environ.get("DRY_RUN", "0").lower() in ("1","true","yes","on")

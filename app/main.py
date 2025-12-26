@@ -19,7 +19,7 @@ from arbitrage.config import (
 
 from arbitrage.data.service import boot_and_start, DataService
 from arbitrage.data.bus import Topic
-from arbitrage.exchanges.user_stream import run_all_user_streams
+from arbitrage.exchanges.user_stream import run_user_stream
 from arbitrage.data.schemas import Position
 from arbitrage.strategy.logic import try_enter_unified, try_exit_unified
 from arbitrage.strategy.pending import GlobalPendingManager
@@ -100,11 +100,8 @@ class Runner:
         logging.info("booting data service with regs=%s", regs)
         await boot_and_start(regs, use_ws=True, persist=False)
 
-        # 启动用户数据流（按腿启用）
-        enable_spot = (HEDGE_KIND=="spot" or QUOTE_KIND=="spot")
-        enable_um   = (HEDGE_KIND in ("usdtm","usdcm")) or (QUOTE_KIND in ("usdtm","usdcm"))
-        enable_cm   = (HEDGE_KIND=="coinm" or QUOTE_KIND=="coinm")
-        asyncio.create_task(run_all_user_streams(enable_spot=enable_spot, enable_um=enable_um, enable_cm=enable_cm))
+        # 启动用户数据流（统一账户：PAPI UDS）
+        asyncio.create_task(run_user_stream())
 
         # 启动成交事件监听
         asyncio.create_task(self._listen_for_fills())
