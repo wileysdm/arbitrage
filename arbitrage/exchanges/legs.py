@@ -3,7 +3,7 @@
 """统一腿适配器（统一账户 / PAPI 版本）。
 
 - 支持：Spot(=PM Cross Margin), Coin-M, UM（USDT-M/USDC-M）
-- 行情：优先从 DataService.bus.latest(...) 读取；若缺失则 REST 兜底
+- 行情：仅从 DataService.bus.latest(...) 读取（WS）；若缺失/过旧则直接报错，由策略跳过本轮
 - 下单：
     - Spot/Margin：PAPI /papi/v1/margin/order
     - Coin-M：exec_binance_rest.py（PAPI /papi/v1/cm/order）
@@ -33,6 +33,8 @@ from arbitrage.config import (
     PAPI_KEY,
     PAPI_SECRET,
     MARGIN_SIDE_EFFECT_TYPE,
+    ORDERBOOK_MAX_AGE_SEC,
+    MARK_MAX_AGE_SEC,
 )
 
 OrderBookSide = List[Tuple[float, float]]
@@ -58,6 +60,35 @@ def _get_meta(kind: str, symbol: str) -> Meta:
 
 def _mid_from_ob(ob: OrderBook) -> float:
     return (ob.bids[0][0] + ob.asks[0][0]) / 2.0
+
+
+def _is_fresh(ts: float, max_age_sec: float) -> bool:
+    try:
+        return (time.time() - float(ts)) <= float(max_age_sec)
+    except Exception:
+        return False
+
+
+def _require_orderbook(symbol: str, limit: int) -> OrderBook:
+    ob = _get_ob(symbol)
+    if not ob:
+        raise RuntimeError(f"orderbook not available for {symbol}")
+    if not _is_fresh(getattr(ob, "ts", 0.0), ORDERBOOK_MAX_AGE_SEC):
+        raise RuntimeError(f"orderbook stale for {symbol}: ts={getattr(ob, 'ts', None)}")
+    if not getattr(ob, "bids", None) or not getattr(ob, "asks", None):
+        raise RuntimeError(f"orderbook empty for {symbol}")
+    if limit and (len(ob.bids) < 1 or len(ob.asks) < 1):
+        raise RuntimeError(f"orderbook insufficient levels for {symbol}")
+    return ob
+
+
+def _require_mark(symbol: str) -> MarkPrice:
+    mp = _get_mark(symbol)
+    if not mp:
+        raise RuntimeError(f"mark not available for {symbol}")
+    if not _is_fresh(getattr(mp, "ts", 0.0), MARK_MAX_AGE_SEC):
+        raise RuntimeError(f"mark stale for {symbol}: ts={getattr(mp, 'ts', None)}")
+    return mp
 
 # ---------------------------------------------------------------------
 # Base
@@ -88,21 +119,17 @@ class SpotLeg(BaseLeg):
         self.symbol = symbol.upper()
 
     def get_books(self, limit=5):
-        ob = _get_ob(self.symbol)
-        if not ob:
-            bids, asks = rest_adp.get_depth("spot", self.symbol, limit=max(20, limit))
-            return bids[:limit], asks[:limit]
+        ob = _require_orderbook(self.symbol, limit)
         return ob.bids[:limit], ob.asks[:limit]
 
     def ref_price(self) -> float:
-        mp = _get_mark(self.symbol)
-        if mp:
+        # spot: 优先 MARK（来自 bookTicker），否则退化为同一份 WS orderbook 的 mid
+        try:
+            mp = _require_mark(self.symbol)
             return float(mp.mark)
-        ob = _get_ob(self.symbol)
-        if ob and ob.bids and ob.asks:
+        except Exception:
+            ob = _require_orderbook(self.symbol, 1)
             return float(_mid_from_ob(ob))
-        bids, asks = rest_adp.get_depth("spot", self.symbol, limit=5)
-        return float((bids[0][0] + asks[0][0]) / 2.0)
 
     def qty_from_usd(self, V_usd: float) -> float:
         return V_usd / max(1e-12, self.ref_price())
@@ -169,21 +196,12 @@ class CoinMLeg(BaseLeg):
             self._C = float(mt.contract_size or 100.0)
 
     def get_books(self, limit=5):
-        ob = _get_ob(self.symbol)
-        if not ob:
-            bids, asks = rest_adp.get_depth("coinm", self.symbol, limit=max(20, limit))
-            return bids[:limit], asks[:limit]
+        ob = _require_orderbook(self.symbol, limit)
         return ob.bids[:limit], ob.asks[:limit]
 
     def ref_price(self) -> float:
-        mp = _get_mark(self.symbol)
-        if mp:
-            return float(mp.mark)
-        # 兜底
-        mark = rest_adp.get_mark("coinm", self.symbol)
-        if mark is None:
-            raise RuntimeError(f"mark not available for coinm:{self.symbol}")
-        return float(mark)
+        mp = _require_mark(self.symbol)
+        return float(mp.mark)
 
     def qty_from_usd(self, V_usd: float) -> float:
         self._ensure_meta()
@@ -216,20 +234,12 @@ class UMLeg(BaseLeg):
     def __init__(self, symbol: str): self.symbol = symbol.upper()
 
     def get_books(self, limit=5):
-        ob = _get_ob(self.symbol)
-        if not ob:
-            bids, asks = rest_adp.get_depth("usdtm", self.symbol, limit=max(20, limit))
-            return bids[:limit], asks[:limit]
+        ob = _require_orderbook(self.symbol, limit)
         return ob.bids[:limit], ob.asks[:limit]
 
     def ref_price(self) -> float:
-        mp = _get_mark(self.symbol)
-        if mp:
-            return float(mp.mark)
-        mark = rest_adp.get_mark("usdtm", self.symbol)  # usdtm/usdcm 同 FAPI
-        if mark is None:
-            raise RuntimeError(f"mark not available for usdtm:{self.symbol}")
-        return float(mark)
+        mp = _require_mark(self.symbol)
+        return float(mp.mark)
 
     def qty_from_usd(self, V_usd: float) -> float:
         return V_usd / max(1e-12, self.ref_price())

@@ -1,5 +1,6 @@
 python-dotenv
-websockets
+websockets>=14,<15
+aiohttp
 requests
 pandas
 numpy

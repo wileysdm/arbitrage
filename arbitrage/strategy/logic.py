@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import time, math
 import logging
 from typing import Any, Dict, Tuple, List, Optional
@@ -287,11 +288,15 @@ async def try_enter_unified():
     quote = make_leg(QUOTE_KIND, QUOTE_SYMBOL)
     hedge = make_leg(HEDGE_KIND, HEDGE_SYMBOL)
 
-    # 取盘口与参考价
-    q_bids, q_asks = quote.get_books(limit=1)
-    h_bids, h_asks = hedge.get_books(limit=1)
-    q_ref = quote.ref_price()
-    h_ref = hedge.ref_price()
+    # 取盘口与参考价（仅 WS；若缺失/过旧则直接跳过本轮）
+    try:
+        q_bids, q_asks = quote.get_books(limit=1)
+        h_bids, h_asks = hedge.get_books(limit=1)
+        q_ref = quote.ref_price()
+        h_ref = hedge.ref_price()
+    except Exception as e:
+        logging.info("skip cycle: market data not ready/stale: %s", e)
+        return (False, None)
     sp_bps_ref = _spread_bps(q_ref, h_ref)
     logging.info("Ref prices: quote=%.4f hedge=%.4f | spread=%.2fbps", q_ref, h_ref, sp_bps_ref)
 
@@ -300,16 +305,17 @@ async def try_enter_unified():
     #    logging.info("❌ 仅正向套利，参考价 spread=%.2fbps < 0，放弃", sp_bps_ref)
     #    return (False, None)
 
-    # 获取两腿上一分钟的成交额
+    # 获取两腿上一分钟的成交额（REST；放到线程池避免阻塞事件循环）
     try:
         logging.info("quote.symbol=%s hedge.symbol=%s", quote.symbol, hedge.symbol)
         if not hasattr(quote, "symbol") or quote.symbol is None:
             raise AttributeError("The 'quote' object does not have a valid 'symbol' attribute.")
-        last_minute_volume = rest.get_last_minute_volume(quote.symbol, QUOTE_KIND)
+        loop = asyncio.get_running_loop()
+        last_minute_volume = await loop.run_in_executor(None, rest.get_last_minute_volume, quote.symbol, QUOTE_KIND)
         if last_minute_volume is None:
             raise ValueError(f"Failed to fetch last minute volume for symbol: {quote.symbol}")
         V_q_last_min = float(last_minute_volume)
-        h_volume = rest.get_last_minute_volume(getattr(hedge, "symbol", ""), HEDGE_KIND)
+        h_volume = await loop.run_in_executor(None, rest.get_last_minute_volume, getattr(hedge, "symbol", ""), HEDGE_KIND)
         if h_volume is None:
             raise ValueError(f"Failed to fetch last minute volume for hedge symbol: {getattr(hedge, 'symbol', '')}")
         V_h_last_min = float(h_volume)

@@ -88,5 +88,10 @@ HYBRID_MIN_FILL_RATIO = float(os.environ.get("HYBRID_MIN_FILL_RATIO", "0.2"))# �
 PAIR_POLL_INTERVAL    = float(os.environ.get("PAIR_POLL_INTERVAL", "0.15"))  # 轮询间隔
 DRY_RUN               = os.environ.get("DRY_RUN", "0").lower() in ("1","true","yes","on")
 
+# —— 行情数据要求（仅 WS，不做 REST depth/mark 兜底）——
+# 小币对可能几秒钟没有订单簿更新，默认给宽松一些；可在 .env 中调大/调小。
+ORDERBOOK_MAX_AGE_SEC = float(os.environ.get("ORDERBOOK_MAX_AGE_SEC", "10"))
+MARK_MAX_AGE_SEC      = float(os.environ.get("MARK_MAX_AGE_SEC", "10"))
+
 #os.environ['http_proxy'] = 'http://localhost:7890'
 #os.environ['https_proxy'] = 'https://localhost:7890'
