@@ -64,7 +64,7 @@ class Runner:
         logging.info("subscribing to execution fills")
         # Wildcard subscription to get all fills
         async for key, fill_data in bus.subscribe(Topic.EXEC_FILLS):
-            await GlobalPendingManager.on_fill(fill_data)
+            await GlobalPendingManager.on_fill(fill_data, market=key)
             logging.debug("received fill for market %s: %s", key, fill_data)
 
     async def _account_log_loop(self):

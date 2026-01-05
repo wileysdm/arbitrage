@@ -6,30 +6,12 @@ Binance WS - Mark/Index（UM/CM）；Spot 使用 bookTicker 近似中位价
 """
 from __future__ import annotations
 import os, ssl, json, time, asyncio
-from dataclasses import dataclass
 from typing import Optional
 
 import websockets
 
-# 兜底 schemas / bus
-try:
-    from arbitrage.data.schemas import MarkPrice
-except Exception:
-    @dataclass
-    class MarkPrice:
-        symbol: str
-        ts: float
-        mark: float
-        index: Optional[float] = None
-
-try:
-    from arbitrage.data.bus import Bus, Topic
-except Exception:
-    class Topic:
-        MARK = "mark"
-    class Bus:
-        def publish(self, topic, key, value):
-            print(f"[NoopBus] {topic} {key} -> mark {value.mark}")
+from arbitrage.data.schemas import MarkPrice
+from arbitrage.data.bus import Bus, Topic
 
 # ---- WS 端点 ----
 def _ws_base(kind: str) -> str:
@@ -52,8 +34,12 @@ def _parse_mark(kind: str, msg: dict) -> float:
     d = msg.get("data") or msg
     if kind == "spot":
         # bookTicker: bestBid/bestAsk
-        b = float(d.get("b") or d.get("bestBidPrice"))
-        a = float(d.get("a") or d.get("bestAskPrice"))
+        b_raw = d.get("b") or d.get("bestBidPrice")
+        a_raw = d.get("a") or d.get("bestAskPrice")
+        if b_raw is None or a_raw is None:
+            raise KeyError("bookTicker bid/ask not found")
+        b = float(b_raw)
+        a = float(a_raw)
         return (b + a) / 2.0
     # UM/CM: markPrice 事件
     # 字段可能为 "p" 或 "markPrice"
@@ -69,6 +55,7 @@ async def run_mark_ws(kind: str,
                       bus: Bus,
                       reconnect_delay: float = 1.0,
                       max_delay: float = 30.0):
+    kind = (kind or "").lower()
     base = _ws_base(kind)
     stream = _stream_name(kind, symbol)
     url = f"{base}/ws/{stream}"
@@ -81,12 +68,14 @@ async def run_mark_ws(kind: str,
                 print(f"[WS mark] connected: {kind}:{symbol}")
                 delay = reconnect_delay
 
+                mkey = f"{kind}:{symbol.upper()}"
+
                 async for raw in ws:
                     try:
                         msg = json.loads(raw)
                         mark = _parse_mark(kind, msg)
                         mp = MarkPrice(symbol=symbol.upper(), ts=time.time(), mark=mark, index=None)
-                        bus.publish(Topic.MARK, mp.symbol, mp)
+                        bus.publish(Topic.MARK, mkey, mp)
                     except Exception as ie:
                         print(f"[WS mark] parse err: {ie}")
         except Exception as e:

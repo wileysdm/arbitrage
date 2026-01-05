@@ -201,7 +201,21 @@ async def _hybrid_maker_then_taker(
     if maker_leg is taker_leg:
         raise ValueError("maker_leg 与 taker_leg 不能相同")
 
-    maker_is_hedge = (maker_leg.symbol.upper() == HEDGE_SYMBOL.upper())
+    maker_is_hedge = (
+        str(getattr(maker_leg, "kind", "")).lower() == str(HEDGE_KIND).lower()
+        and str(getattr(maker_leg, "symbol", "")).upper() == str(HEDGE_SYMBOL).upper()
+    )
+
+    def _uds_market_for_kind(kind: str) -> str:
+        k = (kind or "").lower()
+        if k == "spot":
+            return "spot"
+        if k == "coinm":
+            return "cm"
+        if k in ("usdtm", "usdcm"):
+            return "um"
+        # 兜底：unknown kind 仍尝试按 futures 处理
+        return "um"
 
     if maker_is_hedge:
         maker_side = "BUY" if side == "POS" else "SELL"
@@ -234,22 +248,77 @@ async def _hybrid_maker_then_taker(
         maker_oid,
         maker_leg.symbol,
         taker_leg.symbol,
+        maker_market=_uds_market_for_kind(getattr(maker_leg, "kind", "")),
+        taker_market=_uds_market_for_kind(getattr(taker_leg, "kind", "")),
         timeout=HYBRID_WAIT_SEC
     )
 
     if not fill_data:
-        # 超时未成交 → 尝试撤单
-        logging.warning(f"[HYB] Maker order {maker_oid} 未在 {HYBRID_WAIT_SEC}s 内成交，尝试撤单")
+        # 超时未收到成交事件：仍可能已部分成交（取消/事件丢失/延迟）。
+        filled_qty_timeout = 0.0
+        status_timeout = ""
+        try:
+            status_timeout, filled_qty_timeout = maker_leg.get_order_status(maker_oid)
+            filled_qty_timeout = float(filled_qty_timeout or 0.0)
+        except Exception:
+            filled_qty_timeout = 0.0
+
+        logging.warning(
+            "[HYB] Maker order %s 未在 %.2fs 内收到成交事件；status=%s executed=%.8f。尝试撤单",
+            maker_oid,
+            HYBRID_WAIT_SEC,
+            status_timeout,
+            filled_qty_timeout,
+        )
         try:
             maker_leg.cancel(maker_oid)
         except Exception as e:
             logging.error(f"[HYB] 撤销 maker order {maker_oid} 失败: {e}")
+
+        # 如果确实有成交（哪怕没收到事件），也要做一次补救对冲。
+        if filled_qty_timeout > 0:
+            scale = filled_qty_timeout / max(1e-12, maker_qty)
+            taker_filled_qty = taker_qty * scale
+
+            taker_is_hedge = not maker_is_hedge
+            if taker_is_hedge:
+                taker_side = "SELL" if side == "POS" else "BUY"
+            else:
+                taker_side = "BUY" if side == "POS" else "SELL"
+
+            logging.info(
+                "[HYB] Timeout recovery hedging: taker %s %.8f of %s",
+                taker_side,
+                taker_filled_qty,
+                getattr(taker_leg, "symbol", "?"),
+            )
+            try:
+                # 入场对冲不能用 reduceOnly，否则可能直接被拒单
+                taker_leg.place_market(taker_side, taker_filled_qty, reduce_only=False)
+                return True
+            except Exception as e:
+                logging.error(f"[HYB] timeout recovery taker 对冲失败: {e}")
         return False
 
     # —— 4) 收到成交事件，计算并执行 Taker 对冲 ——
-    filled_qty = float(fill_data.get("lastQty", 0.0))
+    # 收到部分成交事件后立刻撤掉剩余挂单，避免继续成交导致裸露
+    try:
+        maker_leg.cancel(maker_oid)
+    except Exception:
+        pass
+
+    last_qty = float(fill_data.get("lastQty", 0.0) or 0.0)
+    cum_qty = float(fill_data.get("cumQty", 0.0) or 0.0)
+    filled_qty = max(last_qty, cum_qty)
+    # 再用 REST 查一次 executedQty 做兜底（事件可能丢/延迟）
+    try:
+        _st, executed = maker_leg.get_order_status(maker_oid)
+        filled_qty = max(filled_qty, float(executed or 0.0))
+    except Exception:
+        pass
+
     if filled_qty <= 0:
-        logging.warning(f"[HYB] 成交事件中的 lastQty 为 0，不执行对冲. Data: {fill_data}")
+        logging.warning(f"[HYB] 成交数量为 0，不执行对冲. Data: {fill_data}")
         return False
 
     # 按实际已成比例，对冲另一腿的市价规模
@@ -266,7 +335,8 @@ async def _hybrid_maker_then_taker(
     logging.info(f"[HYB] Maker order {maker_oid} filled {filled_qty}. Executing taker leg: {taker_side} {taker_filled_qty} of {taker_leg.symbol}")
 
     try:
-        taker_leg.place_market(taker_side, taker_filled_qty, reduce_only=taker_leg.is_perp())
+        # 入场对冲不能用 reduceOnly，否则 perp 可能直接拒单
+        taker_leg.place_market(taker_side, taker_filled_qty, reduce_only=False)
     except Exception as e:
         logging.error(f"[HYB] taker 对冲失败: {e}")
         # 这里需要考虑补偿逻辑，例如立即市价平掉 maker 腿的仓位

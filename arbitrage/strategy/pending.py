@@ -11,10 +11,19 @@ from typing import Dict, Any, Optional
 
 class PendingHybridOrder:
     """代表一个待处理的 hybrid 模式下的 maker 订单"""
-    def __init__(self, order_id: Any, maker_leg_symbol: str, taker_leg_symbol: str):
+    def __init__(
+        self,
+        order_id: Any,
+        maker_leg_symbol: str,
+        taker_leg_symbol: str,
+        maker_market: Optional[str] = None,
+        taker_market: Optional[str] = None,
+    ):
         self.order_id = order_id
         self.maker_leg_symbol = maker_leg_symbol
         self.taker_leg_symbol = taker_leg_symbol
+        self.maker_market = maker_market
+        self.taker_market = taker_market
         self.fill_event = asyncio.Event()
         self.fill_data: Optional[Dict[str, Any]] = None
 
@@ -39,19 +48,36 @@ class PendingManager:
         self._lock = asyncio.Lock()
 
     @staticmethod
-    def _make_key(order_id: Any, symbol: Optional[str]) -> Any:
+    def _make_key(order_id: Any, symbol: Optional[str], market: Optional[str] = None) -> Any:
+        mk = (market or "").lower().strip()
         sym = (symbol or "").upper().strip()
+        if mk and sym:
+            return (mk, sym, order_id)
         if sym:
             return (sym, order_id)
         return order_id
 
-    async def register(self, order_id: Any, maker_leg_symbol: str, taker_leg_symbol: str, timeout: float) -> Optional[Dict[str, Any]]:
+    async def register(
+        self,
+        order_id: Any,
+        maker_leg_symbol: str,
+        taker_leg_symbol: str,
+        timeout: float,
+        maker_market: Optional[str] = None,
+        taker_market: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         """注册一个新订单并等待其成交"""
-        key = self._make_key(order_id, maker_leg_symbol)
+        key = self._make_key(order_id, maker_leg_symbol, maker_market)
         if key in self._orders:
             return None  # 避免重复注册
 
-        order = PendingHybridOrder(order_id, maker_leg_symbol, taker_leg_symbol)
+        order = PendingHybridOrder(
+            order_id,
+            maker_leg_symbol,
+            taker_leg_symbol,
+            maker_market=maker_market,
+            taker_market=taker_market,
+        )
         async with self._lock:
             self._orders[key] = order
 
@@ -61,17 +87,19 @@ class PendingManager:
         await self.remove(order_id)
         return fill_data
 
-    async def on_fill(self, fill_data: Dict[str, Any]):
+    async def on_fill(self, fill_data: Dict[str, Any], market: Optional[str] = None):
         """从 user_stream 收到成交事件时的回调"""
         order_id = fill_data.get("orderId")
         if not order_id:
             return
 
+        market = market or fill_data.get("market")
         symbol = fill_data.get("symbol")
-        key = self._make_key(order_id, symbol)
+        key = self._make_key(order_id, symbol, market)
+        key_sym_only = self._make_key(order_id, symbol)
 
         async with self._lock:
-            order = self._orders.get(key) or self._orders.get(order_id)
+            order = self._orders.get(key) or self._orders.get(key_sym_only) or self._orders.get(order_id)
             if order:
                 # 检查成交状态，只有当订单部分成交或完全成交时才触发
                 status = fill_data.get("status")

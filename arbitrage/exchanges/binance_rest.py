@@ -110,16 +110,16 @@ def r_signed(base: str,
     if method == "GET":
         # query string 方式
         full_url = url + "?" + body_or_query
-        logging.info("r_signed GET: %s", full_url + str(headers) + "10")
+        logging.info("r_signed GET: %s", url)
         r = _S.get(full_url, headers=headers, timeout=10)
     elif method == "POST":
-        logging.info("r_signed POST: %s", url + str(body_or_query) + str(headers) + "10")
+        logging.info("r_signed POST: %s", url)
         r = _S.post(url, data=body_or_query, headers=headers, timeout=10)
     elif method == "PUT":
-        logging.info("r_signed PUT: %s", url + str(body_or_query) + str(headers) + "10")
+        logging.info("r_signed PUT: %s", url)
         r = _S.put(url, data=body_or_query, headers=headers, timeout=10)
     elif method == "DELETE":
-        logging.info("r_signed DELETE: %s", url + str(body_or_query) + str(headers) + "10")
+        logging.info("r_signed DELETE: %s", url)
         r = _S.delete(url, data=body_or_query, headers=headers, timeout=10)
     else:
         raise ValueError(f"unsupported method: {method}")

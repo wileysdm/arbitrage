@@ -19,7 +19,9 @@ from typing import Optional, Dict
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from arbitrage.data.schemas import OrderBook, MarkPrice, Meta
+from typing import cast
+
+from arbitrage.data.schemas import OrderBook, MarkPrice, Meta, Kind
 from arbitrage.data.bus import Bus, Topic
 
 
@@ -108,7 +110,10 @@ def get_meta(kind: str, symbol: str) -> Meta:
     if not arr:  # spot 有时返回对象也含其它键
         arr = [j] if j.get("symbol") else []
     if not arr:
-        return Meta(symbol=sym, kind=kind)
+        kind_l = (kind or "").lower()
+        if kind_l not in ("spot", "coinm", "usdtm", "usdcm"):
+            raise ValueError(f"unknown kind: {kind}")
+        return Meta(symbol=sym, kind=cast(Kind, kind_l))
 
     s = arr[0]
     cs = None
@@ -123,7 +128,10 @@ def get_meta(kind: str, symbol: str) -> Meta:
         elif ft == "LOT_SIZE":
             qty_step = float(f.get("stepSize", 0.0))
             min_qty = float(f.get("minQty", 0.0))
-    return Meta(symbol=sym, kind=kind, contract_size=cs, price_tick=price_tick, qty_step=qty_step)
+    kind_l = (kind or "").lower()
+    if kind_l not in ("spot", "coinm", "usdtm", "usdcm"):
+        raise ValueError(f"unknown kind: {kind}")
+    return Meta(symbol=sym, kind=cast(Kind, kind_l), contract_size=cs, price_tick=price_tick, qty_step=qty_step)
 
 
 _last_minute_volume_cache = {}  # (symbol, kind) -> (ts, value)
@@ -208,7 +216,8 @@ def get_last_minute_volume(symbol: str, kind: str) -> float | None:
 def poll_once_orderbook(kind: str, symbol: str, bus: Bus):
     bids, asks = get_depth(kind, symbol, limit=20)
     ob = OrderBook(symbol=symbol.upper(), ts=time.time(), bids=bids, asks=asks)
-    bus.publish(Topic.ORDERBOOK, ob.symbol, ob)
+    mkey = f"{(kind or '').lower()}:{ob.symbol}"
+    bus.publish(Topic.ORDERBOOK, mkey, ob)
     return ob
 
 def poll_once_mark(kind: str, symbol: str, bus: Bus):
@@ -219,8 +228,11 @@ def poll_once_mark(kind: str, symbol: str, bus: Bus):
         mp = MarkPrice(symbol=symbol.upper(), ts=time.time(), mark=mid, index=None)
     else:
         mark = get_mark(kind, symbol)
-        mp = MarkPrice(symbol=symbol.upper(), ts=time.time(), mark=mark, index=None)
-    bus.publish(Topic.MARK, mp.symbol, mp)
+        if mark is None:
+            raise RuntimeError(f"mark not available for {kind}:{symbol}")
+        mp = MarkPrice(symbol=symbol.upper(), ts=time.time(), mark=float(mark), index=None)
+    mkey = f"{(kind or '').lower()}:{mp.symbol}"
+    bus.publish(Topic.MARK, mkey, mp)
     return mp
 
 def poll_loop_orderbook(kind: str, symbol: str, bus: Bus, interval: float = 0.5):

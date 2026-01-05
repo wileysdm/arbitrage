@@ -14,43 +14,61 @@ from arbitrage.data.bus import Bus, Topic
 
 class Cache:
     def __init__(self):
+        # key 统一使用 bus key："{kind}:{SYMBOL}"（例如 "spot:BTCUSDT"）
+        # 为兼容旧调用，也允许纯 "SYMBOL" 作为 key。
         self._ob: Dict[str, OrderBook] = {}
         self._mk: Dict[str, MarkPrice] = {}
         self._fr: Dict[str, FundingRate] = {}
         self._mt: Dict[str, Meta] = {}
         self._lock = asyncio.Lock()
 
-    async def set_orderbook(self, ob: OrderBook):
-        async with self._lock:
-            self._ob[ob.symbol] = ob
+    @staticmethod
+    def _normalize_key(key: str) -> str:
+        s = (key or "").strip()
+        if ":" in s:
+            k, sym = s.split(":", 1)
+            return f"{k.lower()}:{sym.upper()}"
+        return s.upper()
 
-    async def set_mark(self, mp: MarkPrice):
+    async def set_orderbook(self, ob: OrderBook, key: str | None = None):
         async with self._lock:
-            self._mk[mp.symbol] = mp
+            k = self._normalize_key(key or ob.symbol)
+            self._ob[k] = ob
 
-    async def set_funding(self, fr: FundingRate):
+    async def set_mark(self, mp: MarkPrice, key: str | None = None):
         async with self._lock:
-            self._fr[fr.symbol] = fr
+            k = self._normalize_key(key or mp.symbol)
+            self._mk[k] = mp
 
-    async def set_meta(self, mt: Meta):
+    async def set_funding(self, fr: FundingRate, key: str | None = None):
         async with self._lock:
-            self._mt[mt.symbol] = mt
+            k = self._normalize_key(key or fr.symbol)
+            self._fr[k] = fr
+
+    async def set_meta(self, mt: Meta, key: str | None = None):
+        async with self._lock:
+            k = self._normalize_key(key or mt.symbol)
+            self._mt[k] = mt
 
     async def get_orderbook(self, symbol: str) -> Optional[OrderBook]:
         async with self._lock:
-            return self._ob.get(symbol)
+            k = self._normalize_key(symbol)
+            return self._ob.get(k)
 
     async def get_mark(self, symbol: str) -> Optional[MarkPrice]:
         async with self._lock:
-            return self._mk.get(symbol)
+            k = self._normalize_key(symbol)
+            return self._mk.get(k)
 
     async def get_funding(self, symbol: str) -> Optional[FundingRate]:
         async with self._lock:
-            return self._fr.get(symbol)
+            k = self._normalize_key(symbol)
+            return self._fr.get(k)
 
     async def get_meta(self, symbol: str) -> Optional[Meta]:
         async with self._lock:
-            return self._mt.get(symbol)
+            k = self._normalize_key(symbol)
+            return self._mt.get(k)
 
 async def pump_from_bus(bus: Bus, cache: Cache):
     """
@@ -64,18 +82,18 @@ async def pump_from_bus(bus: Bus, cache: Cache):
 
     async def _loop_ob():
         async for key, ob in ob_sub:
-            await cache.set_orderbook(ob)
+            await cache.set_orderbook(ob, key=key)
 
     async def _loop_mk():
         async for key, mp in mk_sub:
-            await cache.set_mark(mp)
+            await cache.set_mark(mp, key=key)
 
     async def _loop_fr():
         async for key, fr in fr_sub:
-            await cache.set_funding(fr)
+            await cache.set_funding(fr, key=key)
 
     async def _loop_mt():
         async for key, mt in mt_sub:
-            await cache.set_meta(mt)
+            await cache.set_meta(mt, key=key)
 
     await asyncio.gather(_loop_ob(), _loop_mk(), _loop_fr(), _loop_mt())

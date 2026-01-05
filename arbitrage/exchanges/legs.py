@@ -43,19 +43,22 @@ SVC = DataService.global_service()   # 需先由 app/main.py 注册并 start()
 # ---------------------------------------------------------------------
 # 通用工具
 # ---------------------------------------------------------------------
-def _get_ob(symbol: str) -> Optional[OrderBook]:
-    return SVC.bus.latest(Topic.ORDERBOOK, symbol.upper())
+def _mkey(kind: str, symbol: str) -> str:
+    return f"{(kind or '').lower()}:{symbol.upper()}"
 
-def _get_mark(symbol: str) -> Optional[MarkPrice]:
-    return SVC.bus.latest(Topic.MARK, symbol.upper())
+def _get_ob(kind: str, symbol: str) -> Optional[OrderBook]:
+    return SVC.bus.latest(Topic.ORDERBOOK, _mkey(kind, symbol))
+
+def _get_mark(kind: str, symbol: str) -> Optional[MarkPrice]:
+    return SVC.bus.latest(Topic.MARK, _mkey(kind, symbol))
 
 def _get_meta(kind: str, symbol: str) -> Meta:
-    mt = SVC.bus.latest(Topic.META, symbol.upper())
+    mt = SVC.bus.latest(Topic.META, _mkey(kind, symbol))
     if isinstance(mt, Meta):
         return mt
     # 兜底请求一次并发布
     m = rest_adp.get_meta(kind, symbol)
-    SVC.bus.publish(Topic.META, symbol.upper(), m)
+    SVC.bus.publish(Topic.META, _mkey(kind, symbol), m)
     return m
 
 def _mid_from_ob(ob: OrderBook) -> float:
@@ -69,25 +72,25 @@ def _is_fresh(ts: float, max_age_sec: float) -> bool:
         return False
 
 
-def _require_orderbook(symbol: str, limit: int) -> OrderBook:
-    ob = _get_ob(symbol)
+def _require_orderbook(kind: str, symbol: str, limit: int) -> OrderBook:
+    ob = _get_ob(kind, symbol)
     if not ob:
-        raise RuntimeError(f"orderbook not available for {symbol}")
+        raise RuntimeError(f"orderbook not available for {kind}:{symbol}")
     if not _is_fresh(getattr(ob, "ts", 0.0), ORDERBOOK_MAX_AGE_SEC):
-        raise RuntimeError(f"orderbook stale for {symbol}: ts={getattr(ob, 'ts', None)}")
+        raise RuntimeError(f"orderbook stale for {kind}:{symbol}: ts={getattr(ob, 'ts', None)}")
     if not getattr(ob, "bids", None) or not getattr(ob, "asks", None):
-        raise RuntimeError(f"orderbook empty for {symbol}")
+        raise RuntimeError(f"orderbook empty for {kind}:{symbol}")
     if limit and (len(ob.bids) < 1 or len(ob.asks) < 1):
-        raise RuntimeError(f"orderbook insufficient levels for {symbol}")
+        raise RuntimeError(f"orderbook insufficient levels for {kind}:{symbol}")
     return ob
 
 
-def _require_mark(symbol: str) -> MarkPrice:
-    mp = _get_mark(symbol)
+def _require_mark(kind: str, symbol: str) -> MarkPrice:
+    mp = _get_mark(kind, symbol)
     if not mp:
-        raise RuntimeError(f"mark not available for {symbol}")
+        raise RuntimeError(f"mark not available for {kind}:{symbol}")
     if not _is_fresh(getattr(mp, "ts", 0.0), MARK_MAX_AGE_SEC):
-        raise RuntimeError(f"mark stale for {symbol}: ts={getattr(mp, 'ts', None)}")
+        raise RuntimeError(f"mark stale for {kind}:{symbol}: ts={getattr(mp, 'ts', None)}")
     return mp
 
 # ---------------------------------------------------------------------
@@ -117,18 +120,19 @@ class BaseLeg:
 class SpotLeg(BaseLeg):
     def __init__(self, symbol: str):
         self.symbol = symbol.upper()
+        self.kind = "spot"
 
     def get_books(self, limit=5):
-        ob = _require_orderbook(self.symbol, limit)
+        ob = _require_orderbook(self.kind, self.symbol, limit)
         return ob.bids[:limit], ob.asks[:limit]
 
     def ref_price(self) -> float:
         # spot: 优先 MARK（来自 bookTicker），否则退化为同一份 WS orderbook 的 mid
         try:
-            mp = _require_mark(self.symbol)
+            mp = _require_mark(self.kind, self.symbol)
             return float(mp.mark)
         except Exception:
-            ob = _require_orderbook(self.symbol, 1)
+            ob = _require_orderbook(self.kind, self.symbol, 1)
             return float(_mid_from_ob(ob))
 
     def qty_from_usd(self, V_usd: float) -> float:
@@ -188,6 +192,7 @@ class SpotLeg(BaseLeg):
 class CoinMLeg(BaseLeg):
     def __init__(self, symbol: str):
         self.symbol = symbol.upper()
+        self.kind = "coinm"
         self._C = None  # USD/张
 
     def _ensure_meta(self):
@@ -196,11 +201,11 @@ class CoinMLeg(BaseLeg):
             self._C = float(mt.contract_size or 100.0)
 
     def get_books(self, limit=5):
-        ob = _require_orderbook(self.symbol, limit)
+        ob = _require_orderbook(self.kind, self.symbol, limit)
         return ob.bids[:limit], ob.asks[:limit]
 
     def ref_price(self) -> float:
-        mp = _require_mark(self.symbol)
+        mp = _require_mark(self.kind, self.symbol)
         return float(mp.mark)
 
     def qty_from_usd(self, V_usd: float) -> float:
@@ -231,14 +236,16 @@ class CoinMLeg(BaseLeg):
 # USDⓈ-M（USDT-M / USDC-M）
 # ---------------------------------------------------------------------
 class UMLeg(BaseLeg):
-    def __init__(self, symbol: str): self.symbol = symbol.upper()
+    def __init__(self, kind: str, symbol: str):
+        self.kind = (kind or "").lower()
+        self.symbol = symbol.upper()
 
     def get_books(self, limit=5):
-        ob = _require_orderbook(self.symbol, limit)
+        ob = _require_orderbook(self.kind, self.symbol, limit)
         return ob.bids[:limit], ob.asks[:limit]
 
     def ref_price(self) -> float:
-        mp = _require_mark(self.symbol)
+        mp = _require_mark(self.kind, self.symbol)
         return float(mp.mark)
 
     def qty_from_usd(self, V_usd: float) -> float:
@@ -287,5 +294,5 @@ def make_leg(kind: str, symbol: str) -> BaseLeg:
     if k == "spot":
         return SpotLeg(symbol)
     if k == "coinm": return CoinMLeg(symbol)
-    if k in ("usdtm","usdcm"): return UMLeg(symbol)
+    if k in ("usdtm","usdcm"): return UMLeg(k, symbol)
     raise ValueError(f"unsupported leg kind for PAPI-only build: {kind}")

@@ -152,6 +152,7 @@ async def run_orderbook_ws(
     k = (kind or "").lower()
     sym_u = symbol.upper()
     sym_l = symbol.lower()
+    mkey = f"{k}:{sym_u}"
 
     ws_base = _ws_base(k)
     # 使用 diff book depth 流：<symbol>@depth@{speed_ms}ms
@@ -206,7 +207,7 @@ async def run_orderbook_ws(
                 asks = _sorted_top(asks_book, levels, reverse=False)
                 if bids and asks:
                     ob = OrderBook(symbol=sym_u, ts=last_snapshot_ts, bids=bids, asks=asks)
-                    bus.publish(Topic.ORDERBOOK, sym_u, ob)
+                    bus.publish(Topic.ORDERBOOK, mkey, ob)
 
                 # ========== 主循环：消费 diff depth ==========
                 async for raw in ws:
@@ -263,7 +264,7 @@ async def run_orderbook_ws(
                     asks = _sorted_top(asks_book, levels, reverse=False)
                     if bids and asks:
                         ob = OrderBook(symbol=sym_u, ts=now, bids=bids, asks=asks)
-                        bus.publish(Topic.ORDERBOOK, sym_u, ob)
+                        bus.publish(Topic.ORDERBOOK, mkey, ob)
 
             # 正常退出 inner ws（例如我们主动 break 做 resync），走重连流程
         except Exception as e:
