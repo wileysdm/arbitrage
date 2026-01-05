@@ -22,7 +22,7 @@ from arbitrage.config import (
     ONLY_POSITIVE_CARRY, ENTER_BPS, EXIT_BPS, STOP_BPS, MAX_HOLD_SEC,
     V_USD, MAX_SLIPPAGE_BPS_SPOT, MAX_SLIPPAGE_BPS_COINM,
     EXECUTION_MODE, HEDGE_KIND, QUOTE_KIND, HEDGE_SYMBOL, QUOTE_SYMBOL,EXECUTION_MODE,
-    HYBRID_MAKER_LEG, HYBRID_WAIT_SEC, HYBRID_MIN_FILL_RATIO,
+    HYBRID_WAIT_SEC, HYBRID_MIN_FILL_RATIO,
     PAIR_POLL_INTERVAL, DRY_RUN
 )
 
@@ -182,11 +182,10 @@ def _get_candidate(
 
 async def _hybrid_maker_then_taker(
     side: str,                 # "POS" 或 "NEG"
-    maker_leg, taker_leg,      # 传入已经构造好的两个 Leg 实例（quote/hedge 其一做 maker）
-    maker_qty: float,          # maker 腿目标数量（base 或 张）
-    taker_qty: float,          # taker 腿目标数量（base 或 张）
-    maker_bids, maker_asks,    # maker 腿盘口（用于取 post-only 价：BUY→bid，SELL→ask）
-    taker_bids, taker_asks,    # taker 腿盘口（这里只用于日志或你后续要做风控）
+    quote_leg, hedge_leg,      # 固定：quote 永远 maker（LIMIT_MAKER），hedge 永远 taker（MARKET）
+    quote_qty: float,          # quote 腿数量
+    hedge_qty: float,          # hedge 腿数量
+    quote_bids, quote_asks,    # quote 腿盘口（用于取 post-only 价：BUY→bid，SELL→ask）
 ) -> bool:
     """
     事件驱动版本：先在 maker_leg 下 LIMIT_MAKER，然后等待来自 User Stream 的成交事件。
@@ -197,14 +196,9 @@ async def _hybrid_maker_then_taker(
               f"maker_qty={maker_qty:.8f} taker_qty={taker_qty:.8f}")
         return True
 
-    # —— 1) 决定 maker 腿的买卖方向和价格 ——
-    if maker_leg is taker_leg:
-        raise ValueError("maker_leg 与 taker_leg 不能相同")
-
-    maker_is_hedge = (
-        str(getattr(maker_leg, "kind", "")).lower() == str(HEDGE_KIND).lower()
-        and str(getattr(maker_leg, "symbol", "")).upper() == str(HEDGE_SYMBOL).upper()
-    )
+    # —— 1) 决定 quote(maker) 腿的买卖方向和价格 ——
+    if quote_leg is hedge_leg:
+        raise ValueError("quote_leg 与 hedge_leg 不能相同")
 
     def _uds_market_for_kind(kind: str) -> str:
         k = (kind or "").lower()
@@ -217,15 +211,13 @@ async def _hybrid_maker_then_taker(
         # 兜底：unknown kind 仍尝试按 futures 处理
         return "um"
 
-    if maker_is_hedge:
-        maker_side = "BUY" if side == "POS" else "SELL"
-    else: # maker is quote
-        maker_side = "SELL" if side == "POS" else "BUY"
+    # 固定规则：正套 POS 为 卖 quote / 买 hedge；反向 NEG 为 买 quote / 卖 hedge
+    maker_side = "SELL" if side == "POS" else "BUY"
 
     if maker_side == "BUY":
-        maker_px = maker_bids[0][0] if maker_bids else None
+        maker_px = quote_bids[0][0] if quote_bids else None
     else:
-        maker_px = maker_asks[0][0] if maker_asks else None
+        maker_px = quote_asks[0][0] if quote_asks else None
     
     if maker_px is None:
         logging.warning("[HYB] maker 侧无可用价位")
@@ -233,7 +225,7 @@ async def _hybrid_maker_then_taker(
 
     # —— 2) 下 maker 限价单（LIMIT_MAKER / GTX）——
     try:
-        o = maker_leg.place_limit_maker(maker_side, maker_qty, maker_px)
+        o = quote_leg.place_limit_maker(maker_side, quote_qty, maker_px)
         maker_oid = (o or {}).get("orderId")
         if not maker_oid:
             raise ValueError("下单后未能获取 orderId")
@@ -246,64 +238,25 @@ async def _hybrid_maker_then_taker(
     # —— 3) 等待成交事件 ——
     fill_data = await GlobalPendingManager.register(
         maker_oid,
-        maker_leg.symbol,
-        taker_leg.symbol,
+        quote_leg.symbol,
+        hedge_leg.symbol,
         maker_market=_uds_market_for_kind(getattr(maker_leg, "kind", "")),
         taker_market=_uds_market_for_kind(getattr(taker_leg, "kind", "")),
         timeout=HYBRID_WAIT_SEC
     )
 
     if not fill_data:
-        # 超时未收到成交事件：仍可能已部分成交（取消/事件丢失/延迟）。
-        filled_qty_timeout = 0.0
-        status_timeout = ""
+        # maker 未成交则 hedge 永远不触发：直接撤单并返回
         try:
-            status_timeout, filled_qty_timeout = maker_leg.get_order_status(maker_oid)
-            filled_qty_timeout = float(filled_qty_timeout or 0.0)
+            quote_leg.cancel(maker_oid)
         except Exception:
-            filled_qty_timeout = 0.0
-
-        logging.warning(
-            "[HYB] Maker order %s 未在 %.2fs 内收到成交事件；status=%s executed=%.8f。尝试撤单",
-            maker_oid,
-            HYBRID_WAIT_SEC,
-            status_timeout,
-            filled_qty_timeout,
-        )
-        try:
-            maker_leg.cancel(maker_oid)
-        except Exception as e:
-            logging.error(f"[HYB] 撤销 maker order {maker_oid} 失败: {e}")
-
-        # 如果确实有成交（哪怕没收到事件），也要做一次补救对冲。
-        if filled_qty_timeout > 0:
-            scale = filled_qty_timeout / max(1e-12, maker_qty)
-            taker_filled_qty = taker_qty * scale
-
-            taker_is_hedge = not maker_is_hedge
-            if taker_is_hedge:
-                taker_side = "SELL" if side == "POS" else "BUY"
-            else:
-                taker_side = "BUY" if side == "POS" else "SELL"
-
-            logging.info(
-                "[HYB] Timeout recovery hedging: taker %s %.8f of %s",
-                taker_side,
-                taker_filled_qty,
-                getattr(taker_leg, "symbol", "?"),
-            )
-            try:
-                # 入场对冲不能用 reduceOnly，否则可能直接被拒单
-                taker_leg.place_market(taker_side, taker_filled_qty, reduce_only=False)
-                return True
-            except Exception as e:
-                logging.error(f"[HYB] timeout recovery taker 对冲失败: {e}")
+            pass
         return False
 
     # —— 4) 收到成交事件，计算并执行 Taker 对冲 ——
     # 收到部分成交事件后立刻撤掉剩余挂单，避免继续成交导致裸露
     try:
-        maker_leg.cancel(maker_oid)
+        quote_leg.cancel(maker_oid)
     except Exception:
         pass
 
@@ -312,7 +265,7 @@ async def _hybrid_maker_then_taker(
     filled_qty = max(last_qty, cum_qty)
     # 再用 REST 查一次 executedQty 做兜底（事件可能丢/延迟）
     try:
-        _st, executed = maker_leg.get_order_status(maker_oid)
+        _st, executed = quote_leg.get_order_status(maker_oid)
         filled_qty = max(filled_qty, float(executed or 0.0))
     except Exception:
         pass
@@ -322,21 +275,17 @@ async def _hybrid_maker_then_taker(
         return False
 
     # 按实际已成比例，对冲另一腿的市价规模
-    scale = filled_qty / max(1e-12, maker_qty)
-    taker_filled_qty = taker_qty * scale
+    scale = filled_qty / max(1e-12, quote_qty)
+    taker_filled_qty = hedge_qty * scale
 
-    # 决定 taker 腿的方向
-    taker_is_hedge = not maker_is_hedge
-    if taker_is_hedge:
-        taker_side = "SELL" if side == "POS" else "BUY"
-    else: # taker is quote
-        taker_side = "BUY" if side == "POS" else "SELL"
-
-    logging.info(f"[HYB] Maker order {maker_oid} filled {filled_qty}. Executing taker leg: {taker_side} {taker_filled_qty} of {taker_leg.symbol}")
+    taker_side = "BUY" if side == "POS" else "SELL"
+    logging.info(
+        f"[HYB] Maker order {maker_oid} filled {filled_qty}. Executing hedge taker: {taker_side} {taker_filled_qty} of {hedge_leg.symbol}"
+    )
 
     try:
         # 入场对冲不能用 reduceOnly，否则 perp 可能直接拒单
-        taker_leg.place_market(taker_side, taker_filled_qty, reduce_only=False)
+        hedge_leg.place_market(taker_side, taker_filled_qty, reduce_only=False)
     except Exception as e:
         logging.error(f"[HYB] taker 对冲失败: {e}")
         # 这里需要考虑补偿逻辑，例如立即市价平掉 maker 腿的仓位
@@ -459,19 +408,12 @@ async def try_enter_unified():
     # === 下单（仅 hybrid / taker）===
     if mode == "hybrid":
         logging.info("Executing HYBRID maker_then_taker...")
-        # 由 HYBRID_MAKER_LEG=quote|hedge 决定先 maker 的腿
-        maker_first = (HYBRID_MAKER_LEG == "quote")
-        maker_leg   = quote if maker_first else hedge
-        taker_leg   = hedge if maker_first else quote
-        maker_bids, maker_asks = (q_bids, q_asks) if maker_first else (h_bids, h_asks)
-        taker_bids, taker_asks = (h_bids, h_asks) if maker_first else (q_bids, q_asks)
-
+        # 固定：quote 永远 maker，hedge 永远 taker
         ok = await _hybrid_maker_then_taker(
             side,
-            maker_leg, taker_leg,
-            q_qty if maker_first else h_qty,
-            h_qty if maker_first else q_qty,
-            maker_bids, maker_asks, taker_bids, taker_asks
+            quote, hedge,
+            q_qty, h_qty,
+            q_bids, q_asks,
         )
         if not ok:
             return (False, None)
