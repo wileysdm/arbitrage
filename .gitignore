@@ -1,4 +1,14 @@
+# 密钥与运行时产物，绝不进版本库
 .env
-
+*.env.local
+*.db
+*.db-wal
+*.db-shm
 __pycache__/
-*.py[cod]
+*.pyc
+*.log
+
+# 子仓库各自是独立 git repo（各自 clone/push），不作为 arbitrage 的内容
+arb_data/
+arb_strategy/
+arb_dashboard/

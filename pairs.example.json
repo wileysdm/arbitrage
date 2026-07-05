@@ -1,0 +1,22 @@
+[
+  {
+    "_comment": "策略1 mean_reversion_v3（同所油对，已验证）。strategy 选策略；params 是该策略私有参数(省略则回退 .env 全局默认)。两进程共享这一份 pairs.json：arb_data 用 leg 订阅行情，arb_strategy 用完整配置交易。",
+    "leg_a": {"exchange": "binance", "symbol": "BZUSDT", "market_type": "swap"},
+    "leg_b": {"exchange": "binance", "symbol": "CLUSDT", "market_type": "swap"},
+    "strategy": "mean_reversion_v3",
+    "notional_usd": 1000,
+    "execution_mode": "maker_taker",
+    "maker_quote_leg": "a",
+    "params": {"entry_z": 2.5, "exit_z": 0.5, "cost_margin": 1.5, "fee_rt": null, "entry_persist_bars": 5}
+  },
+  {
+    "_comment": "策略2 basis_arb（跨所同标的价差套利）。binance CL vs bitget CL：价差 >= entry_gap_bps 就开(买便宜腿/卖贵腿)，收敛到 <= exit_gap_bps 平。无暖机，立即可交易。bitget 行情无需 key；LIVE 下单需 BITGET_*，未配则用 TRADING_MODE=paper 先验证。",
+    "leg_a": {"exchange": "binance", "symbol": "CLUSDT", "market_type": "swap"},
+    "leg_b": {"exchange": "bitget", "symbol": "CLUSDT", "market_type": "swap"},
+    "strategy": "basis_arb",
+    "notional_usd": 500,
+    "execution_mode": "maker_taker",
+    "maker_quote_leg": "a",
+    "params": {"entry_gap_bps": 12, "exit_gap_bps": 3, "cost_margin": 1.0, "fee_rt": null}
+  }
+]
